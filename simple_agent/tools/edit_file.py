@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from simple_agent.tools.definitions import EDIT_FILE_DEFINITION
 from simple_agent.tools.base_tool import BaseTool
 from simple_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
 from simple_agent.tools.utils import error, ok
@@ -12,7 +11,25 @@ class EditFileTool(BaseTool):
     """Replace an exact string inside an existing workspace file."""
 
     name = "edit_file"
-    definition = EDIT_FILE_DEFINITION
+    description = "Replace an exact string inside an existing workspace file."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Workspace-relative file path.",
+            },
+            "old_string": {
+                "type": "string",
+                "description": "Exact text to replace.",
+            },
+            "new_string": {
+                "type": "string",
+                "description": "Replacement text.",
+            },
+        },
+        "required": ["path", "old_string", "new_string"],
+    }
 
     def run(self, root: Path, arguments: dict[str, object]) -> str:
         path = arguments.get("path")

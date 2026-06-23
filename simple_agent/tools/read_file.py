@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from simple_agent.tools.definitions import READ_FILE_DEFINITION
 from simple_agent.tools.base_tool import BaseTool
 from simple_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
 from simple_agent.tools.utils import error, ok
@@ -12,7 +11,17 @@ class ReadFileTool(BaseTool):
     """Read a UTF-8 text file inside the workspace."""
 
     name = "read_file"
-    definition = READ_FILE_DEFINITION
+    description = "Read a UTF-8 text file inside the workspace."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Workspace-relative file path.",
+            }
+        },
+        "required": ["path"],
+    }
 
     def __init__(self, max_chars: int = 12_000) -> None:
         self.max_chars = max_chars
