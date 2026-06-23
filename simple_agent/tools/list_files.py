@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from simple_agent.tools.definitions import LIST_FILES_DEFINITION
 from simple_agent.tools.base_tool import BaseTool
 from simple_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
 from simple_agent.tools.utils import error, ok
@@ -12,7 +11,17 @@ class ListFilesTool(BaseTool):
     """List files and directories inside the workspace."""
 
     name = "list_files"
-    definition = LIST_FILES_DEFINITION
+    description = "List files and directories inside the workspace."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Workspace-relative directory path.",
+                "default": ".",
+            }
+        },
+    }
 
     def run(self, root: Path, arguments: dict[str, object]) -> str:
         path = arguments.get("path", ".")

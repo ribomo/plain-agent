@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from simple_agent.tools.base_tool import BaseTool
+from simple_agent.tools.command_policy import RUN_COMMAND_ALLOWED_COMMANDS_TEXT
 from simple_agent.tools.command_runtime import CommandRuntime, CommandRuntimeError
-from simple_agent.tools.definitions import RUN_COMMAND_DEFINITION
 from simple_agent.tools.utils import error
 
 
@@ -17,7 +17,23 @@ class RunCommandTool(BaseTool):
     # allowlist and argument checks conservative.
 
     name = "run_command"
-    definition = RUN_COMMAND_DEFINITION
+    description = (
+        "Run a safe inspection command inside the workspace. "
+        f"{RUN_COMMAND_ALLOWED_COMMANDS_TEXT}"
+    )
+    parameters = {
+        "type": "object",
+        "properties": {
+            "command": {
+                "type": "string",
+                "description": (
+                    "Simple command to run. Shell syntax is not supported. "
+                    f"{RUN_COMMAND_ALLOWED_COMMANDS_TEXT}"
+                ),
+            },
+        },
+        "required": ["command"],
+    }
 
     def __init__(self, timeout_seconds: float = 30, max_output_chars: int = 12_000) -> None:
         self.runtime = CommandRuntime(

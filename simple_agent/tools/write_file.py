@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from simple_agent.tools.definitions import WRITE_FILE_DEFINITION
 from simple_agent.tools.base_tool import BaseTool
 from simple_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
 from simple_agent.tools.utils import error, ok
@@ -12,7 +11,21 @@ class WriteFileTool(BaseTool):
     """Create or overwrite a file inside the workspace."""
 
     name = "write_file"
-    definition = WRITE_FILE_DEFINITION
+    description = "Create or overwrite a file inside the workspace."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Workspace-relative file path.",
+            },
+            "content": {
+                "type": "string",
+                "description": "Full file content.",
+            },
+        },
+        "required": ["path", "content"],
+    }
 
     def run(self, root: Path, arguments: dict[str, object]) -> str:
         path = arguments.get("path")

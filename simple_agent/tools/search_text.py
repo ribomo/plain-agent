@@ -2,7 +2,6 @@
 
 from pathlib import Path
 
-from simple_agent.tools.definitions import SEARCH_TEXT_DEFINITION
 from simple_agent.tools.base_tool import BaseTool
 from simple_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
 from simple_agent.tools.utils import error, ok
@@ -12,7 +11,22 @@ class SearchTextTool(BaseTool):
     """Search for exact text inside workspace files."""
 
     name = "search_text"
-    definition = SEARCH_TEXT_DEFINITION
+    description = "Search for exact text inside workspace files."
+    parameters = {
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "Exact text to search for.",
+            },
+            "path": {
+                "type": "string",
+                "description": "Workspace-relative file or directory path.",
+                "default": ".",
+            },
+        },
+        "required": ["query"],
+    }
 
     def __init__(self, max_results: int = 20) -> None:
         self.max_results = max_results
