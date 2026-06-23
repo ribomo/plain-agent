@@ -147,9 +147,9 @@ class CommandRuntime:
         stderr = stderr[:self.max_output_chars - len(stdout)]
         return stdout, stderr, True
 
-    def _output_text(self, output: str | bytes | None) -> str:
+    def _output_text(self, output: str | bytes | bytearray | memoryview | None) -> str:
         if output is None:
             return ""
-        if isinstance(output, bytes):
-            return output.decode(errors="replace")
-        return output
+        if isinstance(output, str):
+            return output
+        return bytes(output).decode(errors="replace")
