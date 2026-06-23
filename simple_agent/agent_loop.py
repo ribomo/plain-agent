@@ -87,10 +87,9 @@ class SimpleAgent:
     def _approve_run_command(self, arguments: dict[str, object]) -> bool:
         command = arguments.get("command")
         if not isinstance(command, str) or not command.strip():
-            # Empty or invalid commands are blocked
+            # Empty or invalid commands are blocked by the tool implementation.
             return True
         if self.command_approver is None:
-            # The approval function is missing, so do not run the command.
             return False
         return self.command_approver(command)
 

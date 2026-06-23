@@ -2,23 +2,13 @@ import os
 
 from dotenv import load_dotenv
 
-from simple_agent.agent import SimpleAgent
+from simple_agent.agent_loop import SimpleAgent
 from simple_agent.llm_client import (
     DEEPSEEK_BASE_URL,
     OPENAI_BASE_URL,
     OpenAICompatibleClient,
 )
-from simple_agent.streaming import TextDelta, ToolResult
-
-
-def approve_run_command(command: str) -> bool:
-    while True:
-        answer = input(f"\nApprove command `{command}`? [y/N] ").strip().lower()
-        if answer in {"y", "yes"}:
-            return True
-        if answer in {"", "n", "no"}:
-            return False
-        print("Please answer y or n.")
+from simple_agent.terminal_loop import approve_run_command, run_interactive_terminal
 
 
 def main() -> None:
@@ -50,25 +40,7 @@ def main() -> None:
         command_approver=approve_run_command,
     )
 
-    print("Simple agent client. Type 'exit' to quit.")
-
-    while True:
-        user_input = input("> ").strip()
-        if user_input.lower() in {"exit", "quit"}:
-            break
-        if not user_input:
-            continue
-
-        for event in agent.respond_stream(user_input):
-            if isinstance(event, TextDelta):
-                # Chat messages may arrive in multiple chunks
-                # so we print them without a newline and flush after each chunk.
-                print(event.content, end="", flush=True)
-            elif isinstance(event, ToolResult):
-                status = "ok" if event.ok else "error"
-                # print tool call results
-                print(f"\n[tool {event.name}: {status}]")
-        print()
+    run_interactive_terminal(agent)
 
 
 if __name__ == "__main__":
