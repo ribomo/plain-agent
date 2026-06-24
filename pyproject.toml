@@ -1,16 +1,22 @@
+[build-system]
+requires = ["setuptools>=77.0.3"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "simple-agent"
+name = "plain-agent"
 version = "0.1.0"
-description = "An educational simple agent that calls OpenAI-compatible APIs."
+description = "A small agent that calls OpenAI-compatible APIs."
 readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "openai==2.43.0",
     "python-dotenv>=1.2.2",
 ]
 
 [project.scripts]
-simple-agent = "simple_agent.cli:main"
+plain-agent = "simple_agent.cli:main"
 
-[tool.uv]
-package = false
+[tool.setuptools.packages.find]
+include = ["simple_agent*"]

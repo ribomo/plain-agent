@@ -1,6 +1,6 @@
-# Simple Agent
+# Plain Agent
 
-An educational simple agent that calls OpenAI compatible LLM APIs.
+A small agent that calls OpenAI compatible LLM APIs.
 
 This project starts with a streaming agent loop:
 
@@ -48,5 +48,5 @@ You can still set `LLM_BASE_URL` when you want to override the provider default,
 ## Run
 
 ```bash
-uv run simple-agent
+uv run plain-agent
 ```
