@@ -3,10 +3,10 @@
 import json
 from pathlib import Path
 
-from simple_agent.tools.base_tool import BaseTool
-from simple_agent.tools.command_policy import RUN_COMMAND_ALLOWED_COMMANDS_TEXT
-from simple_agent.tools.command_runtime import CommandRuntime, CommandRuntimeError
-from simple_agent.tools.utils import error
+from plain_agent.tools.base_tool import BaseTool
+from plain_agent.tools.command_policy import RUN_COMMAND_ALLOWED_COMMANDS_TEXT
+from plain_agent.tools.command_runtime import CommandRuntime, CommandRuntimeError
+from plain_agent.tools.utils import error
 
 
 class RunCommandTool(BaseTool):

@@ -15,7 +15,7 @@ fake_openai_module = types.ModuleType("openai")
 fake_openai_module.OpenAI = FakeOpenAI
 sys.modules["openai"] = fake_openai_module
 
-from simple_agent.llm_client import (
+from plain_agent.llm_client import (
     DEEPSEEK_BASE_URL,
     OPENAI_BASE_URL,
     DeepSeekClient,

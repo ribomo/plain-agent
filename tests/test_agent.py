@@ -18,8 +18,8 @@ sys.modules.setdefault("openai.types", fake_openai_types_module)
 sys.modules.setdefault("openai.types.chat", fake_openai_chat_module)
 sys.modules.setdefault("openai.types.chat.chat_completion_chunk", fake_openai_chat_chunk_module)
 
-from simple_agent.agent_loop import SimpleAgent
-from simple_agent.streaming import TextDelta, ToolResult
+from plain_agent.agent_loop import SimpleAgent
+from plain_agent.streaming import TextDelta, ToolResult
 
 
 def stream_chunk(content=None, tool_calls=None):

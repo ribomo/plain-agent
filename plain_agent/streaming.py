@@ -7,7 +7,7 @@ from openai.types.chat.chat_completion_chunk import (
     ChoiceDeltaToolCall,
 )
 
-from simple_agent.message_types import AssistantMessageDict, ToolCallDict
+from plain_agent.message_types import AssistantMessageDict, ToolCallDict
 
 
 @dataclass

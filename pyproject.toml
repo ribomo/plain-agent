@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plain-agent"
-version = "0.1.0"
+version = "0.1.1"
 description = "A small agent that calls OpenAI-compatible APIs."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.scripts]
-plain-agent = "simple_agent.cli:main"
+plain-agent = "plain_agent.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["simple_agent*"]
+include = ["plain_agent*"]

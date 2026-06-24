@@ -3,8 +3,8 @@ from io import StringIO
 import unittest
 from unittest.mock import patch
 
-from simple_agent.streaming import TextDelta, ToolResult
-from simple_agent.terminal_loop import approve_run_command, run_interactive_terminal
+from plain_agent.streaming import TextDelta, ToolResult
+from plain_agent.terminal_loop import approve_run_command, run_interactive_terminal
 
 
 class FakeAgent:

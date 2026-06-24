@@ -1,9 +1,9 @@
-"""Interactive terminal loop for the simple agent."""
+"""Interactive terminal loop for the plain agent."""
 
 from collections.abc import Iterable
 from typing import Protocol
 
-from simple_agent.streaming import TextDelta, ToolResult
+from plain_agent.streaming import TextDelta, ToolResult
 
 
 class StreamingAgent(Protocol):

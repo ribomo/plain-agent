@@ -1,4 +1,4 @@
-from simple_agent.cli import main
+from plain_agent.cli import main
 
 
 if __name__ == "__main__":

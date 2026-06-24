@@ -4,16 +4,16 @@ from collections.abc import Iterable
 import json
 from typing import Any, Callable, Generator
 
-from simple_agent.conversation_history import ConversationHistory
-from simple_agent.message_types import ToolCallDict
-from simple_agent.prompt import INITIAL_PROMPT
-from simple_agent.streaming import (
+from plain_agent.conversation_history import ConversationHistory
+from plain_agent.message_types import ToolCallDict
+from plain_agent.prompt import INITIAL_PROMPT
+from plain_agent.streaming import (
     ChatCompletionStreamAccumulator,
     TextDelta,
     ToolResult,
 )
-from simple_agent.tools.tools import Tools
-from simple_agent.tools.utils import error
+from plain_agent.tools.tools import Tools
+from plain_agent.tools.utils import error
 
 
 class SimpleAgent:

@@ -2,13 +2,13 @@ import os
 
 from dotenv import load_dotenv
 
-from simple_agent.agent_loop import SimpleAgent
-from simple_agent.llm_client import (
+from plain_agent.agent_loop import SimpleAgent
+from plain_agent.llm_client import (
     DEEPSEEK_BASE_URL,
     OPENAI_BASE_URL,
     OpenAICompatibleClient,
 )
-from simple_agent.terminal_loop import approve_run_command, run_interactive_terminal
+from plain_agent.terminal_loop import approve_run_command, run_interactive_terminal
 
 
 def main() -> None:

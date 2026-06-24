@@ -2,14 +2,14 @@
 
 from pathlib import Path
 
-from simple_agent.tools.base_tool import BaseTool
-from simple_agent.tools.utils import error
-from simple_agent.tools.list_files import ListFilesTool
-from simple_agent.tools.read_file import ReadFileTool
-from simple_agent.tools.search_text import SearchTextTool
-from simple_agent.tools.write_file import WriteFileTool
-from simple_agent.tools.edit_file import EditFileTool
-from simple_agent.tools.run_command import RunCommandTool
+from plain_agent.tools.base_tool import BaseTool
+from plain_agent.tools.utils import error
+from plain_agent.tools.list_files import ListFilesTool
+from plain_agent.tools.read_file import ReadFileTool
+from plain_agent.tools.search_text import SearchTextTool
+from plain_agent.tools.write_file import WriteFileTool
+from plain_agent.tools.edit_file import EditFileTool
+from plain_agent.tools.run_command import RunCommandTool
 
 
 class Tools:

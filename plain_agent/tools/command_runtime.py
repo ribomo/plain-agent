@@ -5,11 +5,11 @@ from pathlib import Path
 import shlex
 import subprocess
 
-from simple_agent.tools.command_policy import (
+from plain_agent.tools.command_policy import (
     RUN_COMMAND_ALLOWED_COMMANDS,
     RUN_COMMAND_ALLOWED_GIT_SUBCOMMANDS,
 )
-from simple_agent.tools.permissions.file_permission import WorkspacePermission
+from plain_agent.tools.permissions.file_permission import WorkspacePermission
 
 ALLOWED_COMMANDS = set(RUN_COMMAND_ALLOWED_COMMANDS)
 ALLOWED_GIT_SUBCOMMANDS = set(RUN_COMMAND_ALLOWED_GIT_SUBCOMMANDS)

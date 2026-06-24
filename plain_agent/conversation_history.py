@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from copy import deepcopy
 from typing import overload
 
-from simple_agent.message_types import AssistantMessageDict, ChatMessage, ToolMessage, UserMessage
+from plain_agent.message_types import AssistantMessageDict, ChatMessage, ToolMessage, UserMessage
 
 
 class ConversationHistory:

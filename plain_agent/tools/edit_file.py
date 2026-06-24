@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from simple_agent.tools.base_tool import BaseTool
-from simple_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
-from simple_agent.tools.utils import error, ok
+from plain_agent.tools.base_tool import BaseTool
+from plain_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
+from plain_agent.tools.utils import error, ok
 
 
 class EditFileTool(BaseTool):
