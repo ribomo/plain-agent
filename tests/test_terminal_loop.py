@@ -3,6 +3,7 @@ from io import StringIO
 import unittest
 from unittest.mock import patch
 
+from plain_agent.conversation_history import ContextSize
 from plain_agent.streaming import TextDelta, ToolResult
 from plain_agent.terminal_loop import approve_run_command, run_interactive_terminal
 
@@ -23,6 +24,9 @@ class FakeAgent:
         )
         yield TextDelta("Done")
 
+    def context_size(self) -> ContextSize:
+        return ContextSize(message_count=4, char_count=84, byte_count=84)
+
 
 class TerminalLoopTest(unittest.TestCase):
     def test_run_interactive_terminal_streams_text_and_tool_results(self) -> None:
@@ -36,7 +40,11 @@ class TerminalLoopTest(unittest.TestCase):
         self.assertEqual([call.args[0] for call in mock_input.call_args_list], ["> ", "> ", "> "])
         self.assertEqual(agent.prompts, ["Hi"])
         self.assertIn("Simple agent client. Type 'exit' to quit.\n", output.getvalue())
-        self.assertIn("Hello there\n[tool list_files: ok]\nDone\n", output.getvalue())
+        self.assertIn(
+            "Hello there\n[tool list_files: ok]\nDone\n",
+            output.getvalue(),
+        )
+        self.assertIn("[conversation history: 4 messages, 84 chars, 84 bytes]\n\n", output.getvalue())
 
     def test_run_interactive_terminal_handles_eof(self) -> None:
         output = StringIO()

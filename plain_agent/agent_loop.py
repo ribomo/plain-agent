@@ -4,7 +4,7 @@ from collections.abc import Iterable
 import json
 from typing import Any, Callable, Generator
 
-from plain_agent.conversation_history import ConversationHistory
+from plain_agent.conversation_history import ContextSize, ConversationHistory
 from plain_agent.message_types import ToolCallDict
 from plain_agent.prompt import INITIAL_PROMPT
 from plain_agent.streaming import (
@@ -63,6 +63,9 @@ class SimpleAgent:
         final_text = "I stopped because the tool loop reached the max turn limit."
         self.conversation_history.append_assistant(final_text)
         yield TextDelta(final_text)
+
+    def context_size(self) -> ContextSize:
+        return self.conversation_history.context_size()
 
     def _create_llm_stream(self) -> Iterable[Any]:
         return self.llm_client.chat.completions.create(

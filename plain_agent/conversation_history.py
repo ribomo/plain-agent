@@ -2,9 +2,20 @@
 
 from collections.abc import Iterator
 from copy import deepcopy
+from dataclasses import dataclass
+import json
 from typing import overload
 
 from plain_agent.message_types import AssistantMessageDict, ChatMessage, ToolMessage, UserMessage
+
+
+@dataclass(frozen=True)
+class ContextSize:
+    """Exact size of the serialized conversation history."""
+
+    message_count: int
+    char_count: int
+    byte_count: int
 
 
 class ConversationHistory:
@@ -40,6 +51,19 @@ class ConversationHistory:
 
     def to_messages(self) -> list[ChatMessage]:
         return deepcopy(self._messages)
+
+    def context_size(self) -> ContextSize:
+        serialized = json.dumps(
+            self._messages,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return ContextSize(
+            message_count=len(self._messages),
+            char_count=len(serialized),
+            byte_count=len(serialized.encode("utf-8")),
+        )
 
     def __iter__(self) -> Iterator[ChatMessage]:
         return iter(self._messages)

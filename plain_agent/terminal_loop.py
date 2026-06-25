@@ -1,16 +1,7 @@
 """Interactive terminal loop for the plain agent."""
 
-from collections.abc import Iterable
-from typing import Protocol
-
+from plain_agent.agent_loop import SimpleAgent
 from plain_agent.streaming import TextDelta, ToolResult
-
-
-class StreamingAgent(Protocol):
-    """Agent interface used by the terminal loop."""
-
-    def respond_stream(self, user_input: str) -> Iterable[TextDelta | ToolResult]:
-        """Return streamed text and tool-result events for one user prompt."""
 
 
 def approve_run_command(command: str) -> bool:
@@ -24,7 +15,7 @@ def approve_run_command(command: str) -> bool:
         print("Please answer y or n.")
 
 
-def run_interactive_terminal(agent: StreamingAgent) -> None:
+def run_interactive_terminal(agent: SimpleAgent) -> None:
     """Read prompts, stream responses, show tool results, and repeat."""
     print("Simple agent client. Type 'exit' to quit.")
 
@@ -46,4 +37,10 @@ def run_interactive_terminal(agent: StreamingAgent) -> None:
             elif isinstance(event, ToolResult):
                 status = "ok" if event.ok else "error"
                 print(f"\n[tool {event.name}: {status}]")
+
+        size = agent.context_size()
+        print(
+            f"\n[conversation history: {size.message_count} messages, "
+            f"{size.char_count} chars, {size.byte_count} bytes]"
+        )
         print()

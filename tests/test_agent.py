@@ -96,6 +96,48 @@ class SimpleAgentTest(unittest.TestCase):
         self.assertEqual([item["role"] for item in agent.conversation_history], ["system", "user", "assistant"])
         self.assertEqual(agent.conversation_history[-1]["content"], "Hello there")
 
+    def test_context_size_reports_completed_conversation_history(self) -> None:
+        llm_client = FakeLLMClient([stream_response(["Hello"])])
+        agent = SimpleAgent(llm_client=llm_client, model="test-model")
+
+        list(agent.respond_stream("Hi"))
+
+        messages = agent.conversation_history.to_messages()
+        serialized = json.dumps(messages, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        size = agent.context_size()
+        self.assertEqual(size.message_count, len(messages))
+        self.assertEqual(size.char_count, len(serialized))
+        self.assertEqual(size.byte_count, len(serialized.encode("utf-8")))
+
+    def test_context_size_reports_completed_tool_loop_history(self) -> None:
+        llm_client = FakeLLMClient(
+            [
+                stream_response_with_tool_calls([
+                    [
+                        tool_call_delta(
+                            index=0,
+                            call_id="call_1",
+                            name="list_files",
+                            arguments="{}",
+                            call_type="function",
+                        )
+                    ]
+                ]),
+                stream_response(["Done"]),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            agent = SimpleAgent(llm_client=llm_client, model="test-model", workspace=temp_dir)
+
+            list(agent.respond_stream("List files"))
+
+        messages = agent.conversation_history.to_messages()
+        serialized = json.dumps(messages, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+        size = agent.context_size()
+        self.assertEqual(size.message_count, len(messages))
+        self.assertEqual(size.char_count, len(serialized))
+        self.assertEqual(size.byte_count, len(serialized.encode("utf-8")))
+
     def test_respond_stream_runs_tool_call_then_streams_final_answer(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             main_path = f"{temp_dir}/main.py"
