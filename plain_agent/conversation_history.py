@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 import json
-from typing import Self, overload
+from typing import overload
 
 from plain_agent.message_types import (
     ASSISTANT_ROLE,
@@ -27,18 +27,11 @@ class ContextSize:
     byte_count: int
 
 
-@dataclass(frozen=True)
+@dataclass
 class ConversationExchange:
     """Messages for one user request, ending before the next user-role message."""
 
-    messages: tuple[ChatMessage, ...]
-
-    @classmethod
-    def from_messages(cls, messages: list[ChatMessage]) -> Self:
-        return cls(tuple(deepcopy(messages)))
-
-    def to_messages(self) -> list[ChatMessage]:
-        return deepcopy(list(self.messages))
+    messages: list[ChatMessage]
 
 
 class ConversationHistory:
@@ -85,13 +78,13 @@ class ConversationHistory:
             if message["role"] == USER_ROLE:
                 if current:
                     # A new user message starts the next exchange, so close the previous one.
-                    exchanges.append(ConversationExchange.from_messages(current))
+                    exchanges.append(ConversationExchange(current))
                 current = [message]
             elif current:
                 current.append(message)
 
         if current:
-            exchanges.append(ConversationExchange.from_messages(current))
+            exchanges.append(ConversationExchange(current))
 
         return exchanges
 

@@ -64,12 +64,12 @@ class ConversationHistoryTest(unittest.TestCase):
         )
         self.assertEqual(exchanges[0].messages[2]["tool_call_id"], "call_1")
 
-    def test_conversation_exchange_from_messages_snapshots_messages(self) -> None:
+    def test_conversation_exchange_keeps_grouped_messages(self) -> None:
         messages = [{"role": "user", "content": "Original"}]
 
-        exchange = ConversationExchange.from_messages(messages)
-        messages[0]["content"] = "Changed"
+        exchange = ConversationExchange(messages)
 
+        self.assertIs(exchange.messages, messages)
         self.assertEqual(exchange.messages[0]["content"], "Original")
 
 
