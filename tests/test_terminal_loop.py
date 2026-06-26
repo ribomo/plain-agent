@@ -6,10 +6,10 @@ from unittest.mock import patch
 from plain_agent.conversation_history import ContextSize
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
 from plain_agent.terminal_loop import (
-    _format_token_count,
     approve_run_command,
     run_interactive_terminal,
 )
+from plain_agent.ui.terminal_renderer import format_token_count
 
 
 class FakeAgent:
@@ -44,6 +44,12 @@ class FakeAgent:
         return self.compact_result
 
 
+class FakeMarkdownAgent(FakeAgent):
+    def respond_stream(self, user_input: str):
+        self.prompts.append(user_input)
+        yield TextDelta("Use **bold** text")
+
+
 class TerminalLoopTest(unittest.TestCase):
     def test_run_interactive_terminal_streams_text_and_tool_results(self) -> None:
         agent = FakeAgent()
@@ -55,12 +61,23 @@ class TerminalLoopTest(unittest.TestCase):
 
         self.assertEqual([call.args[0] for call in mock_input.call_args_list], ["> ", "> ", "> "])
         self.assertEqual(agent.prompts, ["Hi"])
-        self.assertIn("Simple agent client. Type 'exit' to quit.\n", output.getvalue())
+        self.assertIn("Plain Agent Type 'exit' to quit.\n", output.getvalue())
         self.assertIn(
             "Hello there\n[tool list_files: ok]\nDone\n",
             output.getvalue(),
         )
         self.assertIn("[conversation history: 4 messages, ~2.1k tokens]\n\n", output.getvalue())
+
+    def test_run_interactive_terminal_renders_live_markdown_text(self) -> None:
+        agent = FakeMarkdownAgent()
+        output = StringIO()
+
+        with patch("builtins.input", side_effect=["Hi", "exit"]):
+            with redirect_stdout(output):
+                run_interactive_terminal(agent)
+
+        self.assertIn("Use bold text\n", output.getvalue())
+        self.assertNotIn("**bold**", output.getvalue())
 
     def test_run_interactive_terminal_compacts_on_command(self) -> None:
         agent = FakeAgent(compact_result=True)
@@ -72,7 +89,7 @@ class TerminalLoopTest(unittest.TestCase):
 
         self.assertEqual(agent.prompts, [])
         self.assertEqual(agent.compact_calls, 1)
-        self.assertIn("[conversation compacted]\n", output.getvalue())
+        self.assertIn("[conversation: compacted]\n", output.getvalue())
         self.assertIn("[conversation history: 4 messages, ~2.1k tokens]\n\n", output.getvalue())
 
     def test_run_interactive_terminal_reports_auto_compaction_events(self) -> None:
@@ -108,8 +125,8 @@ class TerminalLoopTest(unittest.TestCase):
         self.assertTrue(output.getvalue().endswith("\n\n"))
 
     def test_format_token_count_uses_k_suffix_for_large_counts(self) -> None:
-        self.assertEqual(_format_token_count(999), "999")
-        self.assertEqual(_format_token_count(2_100), "2.1k")
+        self.assertEqual(format_token_count(999), "999")
+        self.assertEqual(format_token_count(2_100), "2.1k")
 
     def test_approve_run_command_accepts_yes(self) -> None:
         output = StringIO()
