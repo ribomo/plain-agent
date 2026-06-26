@@ -1,7 +1,7 @@
 import json
 import unittest
 
-from plain_agent.conversation_history import ConversationExchange, ConversationHistory
+from plain_agent.conversation_history import ConversationExchange, ConversationHistory, estimate_token_count
 
 
 class ConversationHistoryTest(unittest.TestCase):
@@ -71,6 +71,13 @@ class ConversationHistoryTest(unittest.TestCase):
 
         self.assertIs(exchange.messages, messages)
         self.assertEqual(exchange.messages[0]["content"], "Original")
+
+    def test_estimate_token_count_uses_character_heuristic_and_rounds_up(self) -> None:
+        self.assertEqual(estimate_token_count(0), 0)
+        self.assertEqual(estimate_token_count(1), 1)
+        self.assertEqual(estimate_token_count(4), 1)
+        self.assertEqual(estimate_token_count(5), 2)
+        self.assertEqual(estimate_token_count(8_400), 2_100)
 
 if __name__ == "__main__":
     unittest.main()

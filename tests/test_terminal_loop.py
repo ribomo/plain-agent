@@ -6,7 +6,6 @@ from unittest.mock import patch
 from plain_agent.conversation_history import ContextSize
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
 from plain_agent.terminal_loop import (
-    _estimate_token_count,
     _format_token_count,
     approve_run_command,
     run_interactive_terminal,
@@ -107,11 +106,6 @@ class TerminalLoopTest(unittest.TestCase):
                 run_interactive_terminal(FakeAgent())
 
         self.assertTrue(output.getvalue().endswith("\n\n"))
-
-    def test_estimate_token_count_uses_character_heuristic(self) -> None:
-        self.assertEqual(_estimate_token_count(0), 0)
-        self.assertEqual(_estimate_token_count(1), 1)
-        self.assertEqual(_estimate_token_count(8_400), 2_100)
 
     def test_format_token_count_uses_k_suffix_for_large_counts(self) -> None:
         self.assertEqual(_format_token_count(999), "999")

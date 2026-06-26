@@ -4,6 +4,7 @@ from collections.abc import Iterator
 from copy import deepcopy
 from dataclasses import dataclass
 import json
+import math
 from typing import overload
 
 from plain_agent.message_types import (
@@ -16,6 +17,8 @@ from plain_agent.message_types import (
     ToolMessage,
     UserMessage,
 )
+
+ESTIMATED_CHARS_PER_TOKEN = 4
 
 
 @dataclass(frozen=True)
@@ -32,6 +35,13 @@ class ConversationExchange:
     """Messages for one user request, ending before the next user-role message."""
 
     messages: list[ChatMessage]
+
+
+def estimate_token_count(char_count: int) -> int:
+    if char_count <= 0:
+        return 0
+    # Rounding up keeps token estimates from falling below the character heuristic.
+    return math.ceil(char_count / ESTIMATED_CHARS_PER_TOKEN)
 
 
 class ConversationHistory:

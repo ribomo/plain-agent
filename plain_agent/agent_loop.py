@@ -5,7 +5,7 @@ import json
 from typing import Any, Callable, Generator
 
 from plain_agent.compaction import ConversationCompactor
-from plain_agent.conversation_history import ContextSize, ConversationHistory
+from plain_agent.conversation_history import ContextSize, ConversationHistory, estimate_token_count
 from plain_agent.message_types import ToolCallDict
 from plain_agent.prompt import INITIAL_PROMPT
 from plain_agent.streaming import (
@@ -16,9 +16,6 @@ from plain_agent.streaming import (
 )
 from plain_agent.tools.tools import Tools
 from plain_agent.tools.utils import error
-
-ESTIMATED_CHARS_PER_TOKEN = 4
-
 
 class SimpleAgent:
     """A tiny Chat Completions agent loop with workspace tools."""
@@ -89,7 +86,7 @@ class SimpleAgent:
             return None
 
         current_size = self.context_size()
-        if self._estimate_token_count(current_size.char_count) < self.auto_compact_max_tokens:
+        if estimate_token_count(current_size.char_count) < self.auto_compact_max_tokens:
             return None
 
         # Run compaction
@@ -99,11 +96,6 @@ class SimpleAgent:
 
         after = self.context_size()
         return AutoCompaction(before=current_size, after=after)
-
-    def _estimate_token_count(self, char_count: int) -> int:
-        if char_count <= 0:
-            return 0
-        return max(1, round(char_count / ESTIMATED_CHARS_PER_TOKEN))
 
     def _create_llm_stream(self) -> Iterable[Any]:
         return self.llm_client.chat.completions.create(

@@ -1,9 +1,8 @@
 """Interactive terminal loop for the plain agent."""
 
 from plain_agent.agent_loop import SimpleAgent
+from plain_agent.conversation_history import estimate_token_count
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
-
-ESTIMATED_CHARS_PER_TOKEN = 4
 
 
 def approve_run_command(command: str) -> bool:
@@ -50,8 +49,8 @@ def run_interactive_terminal(agent: SimpleAgent) -> None:
             elif isinstance(event, AutoCompaction):
                 print(
                     "[conversation auto-compacted: "
-                    f"~{_format_token_count(_estimate_token_count(event.before.char_count))} -> "
-                    f"~{_format_token_count(_estimate_token_count(event.after.char_count))} tokens]"
+                    f"~{_format_token_count(estimate_token_count(event.before.char_count))} -> "
+                    f"~{_format_token_count(estimate_token_count(event.after.char_count))} tokens]"
                 )
 
         print()
@@ -63,14 +62,8 @@ def _print_context_size(agent: SimpleAgent) -> None:
     size = agent.context_size()
     print(
         f"[conversation history: {size.message_count} messages, "
-        f"~{_format_token_count(_estimate_token_count(size.char_count))} tokens]"
+        f"~{_format_token_count(estimate_token_count(size.char_count))} tokens]"
     )
-
-
-def _estimate_token_count(char_count: int) -> int:
-    if char_count <= 0:
-        return 0
-    return max(1, round(char_count / ESTIMATED_CHARS_PER_TOKEN))
 
 
 def _format_token_count(token_count: int) -> str:
