@@ -2,9 +2,46 @@
 
 from collections.abc import Iterator
 from copy import deepcopy
+from dataclasses import dataclass
+import json
+import math
 from typing import overload
 
-from plain_agent.message_types import AssistantMessageDict, ChatMessage, ToolMessage, UserMessage
+from plain_agent.message_types import (
+    ASSISTANT_ROLE,
+    SYSTEM_ROLE,
+    TOOL_ROLE,
+    USER_ROLE,
+    AssistantMessageDict,
+    ChatMessage,
+    ToolMessage,
+    UserMessage,
+)
+
+ESTIMATED_CHARS_PER_TOKEN = 4
+
+
+@dataclass(frozen=True)
+class ContextSize:
+    """Exact size of the serialized conversation history."""
+
+    message_count: int
+    char_count: int
+    byte_count: int
+
+
+@dataclass
+class ConversationExchange:
+    """Messages for one user request, ending before the next user-role message."""
+
+    messages: list[ChatMessage]
+
+
+def estimate_token_count(char_count: int) -> int:
+    if char_count <= 0:
+        return 0
+    # Rounding up keeps token estimates from falling below the character heuristic.
+    return math.ceil(char_count / ESTIMATED_CHARS_PER_TOKEN)
 
 
 class ConversationHistory:
@@ -13,23 +50,23 @@ class ConversationHistory:
 
     def __init__(self, system_prompt: str) -> None:
         self._messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": SYSTEM_ROLE, "content": system_prompt},
         ]
 
     def append(self, message: ChatMessage) -> None:
         self._messages.append(message)
 
     def append_user(self, content: str) -> None:
-        message: UserMessage = {"role": "user", "content": content}
+        message: UserMessage = {"role": USER_ROLE, "content": content}
         self.append(message)
 
     def append_assistant(self, content: str) -> None:
-        message: AssistantMessageDict = {"role": "assistant", "content": content}
+        message: AssistantMessageDict = {"role": ASSISTANT_ROLE, "content": content}
         self.append(message)
 
     def append_tool(self, tool_call_id: str, content: str) -> None:
         message: ToolMessage = {
-            "role": "tool",
+            "role": TOOL_ROLE,
             "tool_call_id": tool_call_id,
             "content": content,
         }
@@ -40,6 +77,39 @@ class ConversationHistory:
 
     def to_messages(self) -> list[ChatMessage]:
         return deepcopy(self._messages)
+
+    def exchanges(self) -> list[ConversationExchange]:
+        exchanges: list[ConversationExchange] = []
+        current: list[ChatMessage] = []
+
+        for message in self._messages:
+            if message["role"] == SYSTEM_ROLE:
+                continue
+            if message["role"] == USER_ROLE:
+                if current:
+                    # A new user message starts the next exchange, so close the previous one.
+                    exchanges.append(ConversationExchange(current))
+                current = [message]
+            elif current:
+                current.append(message)
+
+        if current:
+            exchanges.append(ConversationExchange(current))
+
+        return exchanges
+
+    def context_size(self) -> ContextSize:
+        serialized = json.dumps(
+            self._messages,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return ContextSize(
+            message_count=len(self._messages),
+            char_count=len(serialized),
+            byte_count=len(serialized.encode("utf-8")),
+        )
 
     def __iter__(self) -> Iterator[ChatMessage]:
         return iter(self._messages)
