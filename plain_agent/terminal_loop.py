@@ -1,8 +1,8 @@
 """Interactive terminal loop for the plain agent."""
 
 from plain_agent.agent_loop import SimpleAgent
-from plain_agent.conversation_history import estimate_token_count
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
+from plain_agent.ui.terminal_renderer import TerminalRenderer
 
 
 def approve_run_command(command: str) -> bool:
@@ -16,15 +16,16 @@ def approve_run_command(command: str) -> bool:
         print("Please answer y or n.")
 
 
-def run_interactive_terminal(agent: SimpleAgent) -> None:
+def run_interactive_terminal(agent: SimpleAgent, renderer: TerminalRenderer | None = None) -> None:
     """Read prompts, stream responses, show tool results, and repeat."""
-    print("Simple agent client. Type 'exit' to quit.")
+    renderer = renderer or TerminalRenderer()
+    renderer.print_welcome()
 
     while True:
         try:
             user_input = input("> ").strip()
         except EOFError:
-            print()
+            renderer.print_blank_line()
             break
 
         if user_input.lower() in {"exit", "quit"}:
@@ -33,40 +34,25 @@ def run_interactive_terminal(agent: SimpleAgent) -> None:
             continue
         if user_input == "/compact":
             if agent.compact_history():
-                print("[conversation compacted]")
-                _print_context_size(agent)
+                renderer.print_status("conversation", "compacted", "green")
+                renderer.print_context_size(agent.context_size())
             else:
-                print("[conversation compact: nothing to compact]")
-            print()
+                renderer.print_status("conversation compact", "nothing to compact", "yellow")
+            renderer.print_blank_line()
             continue
 
-        for event in agent.respond_stream(user_input):
-            if isinstance(event, TextDelta):
-                print(event.content, end="", flush=True)
-            elif isinstance(event, ToolResult):
-                status = "ok" if event.ok else "error"
-                print(f"\n[tool {event.name}: {status}]")
-            elif isinstance(event, AutoCompaction):
-                print(
-                    "[conversation auto-compacted: "
-                    f"~{_format_token_count(estimate_token_count(event.before.char_count))} -> "
-                    f"~{_format_token_count(estimate_token_count(event.after.char_count))} tokens]"
-                )
+        try:
+            for event in agent.respond_stream(user_input):
+                if isinstance(event, TextDelta):
+                    renderer.update_assistant(event.content)
+                elif isinstance(event, ToolResult):
+                    renderer.finish_assistant()
+                    renderer.print_tool_result(event)
+                elif isinstance(event, AutoCompaction):
+                    renderer.print_auto_compaction(event.before, event.after)
+        finally:
+            renderer.finish_assistant()
 
-        print()
-        _print_context_size(agent)
-        print()
-
-
-def _print_context_size(agent: SimpleAgent) -> None:
-    size = agent.context_size()
-    print(
-        f"[conversation history: {size.message_count} messages, "
-        f"~{_format_token_count(estimate_token_count(size.char_count))} tokens]"
-    )
-
-
-def _format_token_count(token_count: int) -> str:
-    if token_count >= 1_000:
-        return f"{token_count / 1_000:.1f}k"
-    return str(token_count)
+        renderer.print_blank_line()
+        renderer.print_context_size(agent.context_size())
+        renderer.print_blank_line()
