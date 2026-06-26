@@ -41,16 +41,18 @@ def run_interactive_terminal(agent: SimpleAgent, renderer: TerminalRenderer | No
             renderer.print_blank_line()
             continue
 
-        for event in agent.respond_stream(user_input):
-            if isinstance(event, TextDelta):
-                renderer.update_assistant(event.content)
-            elif isinstance(event, ToolResult):
-                renderer.finish_assistant()
-                renderer.print_tool_result(event)
-            elif isinstance(event, AutoCompaction):
-                renderer.print_auto_compaction(event.before, event.after)
+        try:
+            for event in agent.respond_stream(user_input):
+                if isinstance(event, TextDelta):
+                    renderer.update_assistant(event.content)
+                elif isinstance(event, ToolResult):
+                    renderer.finish_assistant()
+                    renderer.print_tool_result(event)
+                elif isinstance(event, AutoCompaction):
+                    renderer.print_auto_compaction(event.before, event.after)
+        finally:
+            renderer.finish_assistant()
 
-        renderer.finish_assistant()
         renderer.print_blank_line()
         renderer.print_context_size(agent.context_size())
         renderer.print_blank_line()
