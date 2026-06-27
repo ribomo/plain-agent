@@ -21,15 +21,10 @@ def run_interactive_terminal(agent: SimpleAgent, renderer: TerminalRenderer | No
     """Read prompts, stream responses, show tool results, and repeat."""
     renderer = renderer or TerminalRenderer()
     if renderer.console.is_terminal and sys.stdin.isatty():
-        try:
-            from plain_agent.ui.textual_terminal import run_textual_terminal
+        from plain_agent.ui.textual_terminal import run_textual_terminal
 
-            run_textual_terminal(agent)
-            return
-        except ModuleNotFoundError as exc:
-            if exc.name != "textual":
-                raise
-            renderer.print_status("terminal ui", "textual is not installed; using basic prompt", "yellow")
+        run_textual_terminal(agent)
+        return
 
     _run_basic_interactive_terminal(agent, renderer)
 
