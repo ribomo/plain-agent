@@ -22,8 +22,8 @@ def format_welcome() -> Text:
 
 def format_context_size(size: ContextSize) -> Text:
     return status_text(
-        "conversation history",
-        f"{size.message_count} messages, ~{format_token_count(estimate_token_count(size.char_count))} tokens",
+        "context",
+        f"~{format_token_count(estimate_token_count(size.char_count))} tokens",
         "dim",
     )
 

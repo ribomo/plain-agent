@@ -14,6 +14,7 @@ from textual.containers import Container, Horizontal, VerticalScroll
 from textual.widgets import Input, Static
 
 from plain_agent.agent_loop import SimpleAgent
+from plain_agent.conversation_history import ContextSize
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
 from plain_agent.ui.textual_terminal.approval import PendingApproval, parse_approval_answer
 from plain_agent.ui.textual_terminal.rendering import (
@@ -63,6 +64,7 @@ class PlainAgentTextualApp(App[None]):
         self.agent = agent
         self.transcript: TextualTranscript
         self.status: Static
+        self.context_status: Static
         self.prompt_row: Horizontal
         self.prompt_label: Static
         self.prompt_input: PromptInput
@@ -77,15 +79,19 @@ class PlainAgentTextualApp(App[None]):
             with Horizontal(id="prompt-row"):
                 yield Static("> ", id="prompt-label")
                 yield PromptInput(id="prompt-input", compact=True)
-            yield Static("", id="status")
+            with Horizontal(id="status-row"):
+                yield Static("", id="status")
+                yield Static("", id="context-status")
 
     def on_mount(self) -> None:
         self.transcript = TextualTranscript(self.query_one("#transcript", VerticalScroll))
         self.status = self.query_one("#status", Static)
+        self.context_status = self.query_one("#context-status", Static)
         self.prompt_row = self.query_one("#prompt-row", Horizontal)
         self.prompt_label = self.query_one("#prompt-label", Static)
         self.prompt_input = self.query_one("#prompt-input", PromptInput)
         self._set_status("")
+        self._set_context_status(self.agent.context_size())
         self.transcript.append(format_welcome())
         self.prompt_input.focus()
         self.agent.command_approver = self._approve_run_command
@@ -159,7 +165,7 @@ class PlainAgentTextualApp(App[None]):
             self._set_status("Conversation compaction failed.")
         elif compacted:
             self.transcript.append(status_text("conversation", "compacted", "green"))
-            self.transcript.append(format_context_size(self.agent.context_size()))
+            self._set_context_status(self.agent.context_size())
             self._set_status("")
         else:
             self.transcript.append(status_text("conversation compact", "nothing to compact", "yellow"))
@@ -221,8 +227,8 @@ class PlainAgentTextualApp(App[None]):
 
     async def _finish_response(self, error_message: str | None) -> None:
         await self.transcript.finish_assistant()
+        self._set_context_status(self.agent.context_size())
         if error_message is None:
-            self.transcript.append(format_context_size(self.agent.context_size()))
             self._set_status("")
         else:
             self.transcript.append(status_text("assistant error", error_message, "bold red"))
@@ -231,6 +237,9 @@ class PlainAgentTextualApp(App[None]):
 
     def _set_status(self, text: str) -> None:
         self.status.update(text.strip())
+
+    def _set_context_status(self, size: ContextSize) -> None:
+        self.context_status.update(format_context_size(size))
 
     def _set_prompt_active(self, active: bool) -> None:
         prompt_row = getattr(self, "prompt_row", None)

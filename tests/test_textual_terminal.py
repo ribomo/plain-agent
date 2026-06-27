@@ -28,10 +28,10 @@ class TextualTerminalTest(unittest.TestCase):
 
         self.assertEqual(rendered, "[tool list_files: ok]")
 
-    def test_format_context_size_matches_basic_terminal(self) -> None:
+    def test_format_context_size_only_shows_tokens(self) -> None:
         rendered = format_context_size(ContextSize(message_count=4, char_count=8_400, byte_count=8_400)).plain
 
-        self.assertEqual(rendered, "[conversation history: 4 messages, ~2.1k tokens]")
+        self.assertEqual(rendered, "[context: ~2.1k tokens]")
 
     def test_parse_approval_answer_accepts_yes(self) -> None:
         self.assertIs(parse_approval_answer("y"), True)
@@ -48,6 +48,16 @@ class TextualTerminalTest(unittest.TestCase):
 
 
 class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
+    async def test_context_status_is_shown_at_startup(self) -> None:
+        app = PlainAgentTextualApp(_FakeAgent())
+
+        async with app.run_test():
+            self.assertEqual(
+                app.context_status.render().plain,
+                "[context: ~0 tokens]",
+            )
+            self.assertEqual(app.context_status.region.right, app.screen.region.right)
+
     async def test_prompt_can_release_focus(self) -> None:
         app = PlainAgentTextualApp(_FakeAgent())
 
@@ -196,7 +206,12 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(app._compacting)
             entries = [entry.plain_text for entry in app.query(TranscriptEntry)]
             self.assertIn("[conversation: compacted]", entries)
+            self.assertNotIn("[context: ~25 tokens]", entries)
             self.assertEqual(app.status.render().plain, "")
+            self.assertEqual(
+                app.context_status.render().plain,
+                "[context: ~25 tokens]",
+            )
 
     async def test_response_failure_is_rendered_in_transcript(self) -> None:
         app = PlainAgentTextualApp(_FailingAgent())
@@ -211,6 +226,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             entries = [entry.plain_text for entry in app.query(TranscriptEntry)]
             self.assertIn("[assistant error: RuntimeError: network unavailable]", entries)
             self.assertEqual(app.status.render().plain, "Assistant response failed.")
+            self.assertEqual(app.context_status.render().plain, "[context: ~25 tokens]")
 
     async def test_background_stream_updates_incremental_markdown(self) -> None:
         app = PlainAgentTextualApp(_StreamingAgent())
@@ -231,16 +247,34 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(welcome.get_selection(SELECT_ALL)[0], "Plain Agent Type 'exit' to quit.")
             self.assertEqual(len(app.query(AssistantResponse)), 1)
             self.assertEqual(app.status.render().plain, "")
+            self.assertEqual(
+                app.context_status.render().plain,
+                "[context: ~25 tokens]",
+            )
+            self.assertEqual(app.context_status.region.right, app.screen.region.right)
+            entries = [entry.plain_text for entry in app.query(TranscriptEntry)]
+            self.assertNotIn("[context: ~25 tokens]", entries)
 
 
 class _FakeAgent:
     command_approver = None
 
+    def context_size(self) -> ContextSize:
+        return ContextSize(message_count=0, char_count=0, byte_count=0)
+
 
 class _FailingAgent(_FakeAgent):
+    def __init__(self) -> None:
+        self.failed = False
+
     def respond_stream(self, user_input: str):
+        self.failed = True
         raise RuntimeError("network unavailable")
         yield
+
+    def context_size(self) -> ContextSize:
+        char_count = 100 if self.failed else 0
+        return ContextSize(message_count=2, char_count=char_count, byte_count=char_count)
 
 
 class _StreamingAgent(_FakeAgent):
