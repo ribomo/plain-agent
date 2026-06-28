@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from plain_agent.sandbox import SandboxBackend, discover_linux_sandbox
 from plain_agent.tools.base_tool import BaseTool
 from plain_agent.tools.utils import error
 from plain_agent.tools.list_files import ListFilesTool
@@ -10,6 +11,8 @@ from plain_agent.tools.search_text import SearchTextTool
 from plain_agent.tools.write_file import WriteFileTool
 from plain_agent.tools.edit_file import EditFileTool
 from plain_agent.tools.run_command import RunCommandTool
+
+_AUTO_SANDBOX = object()
 
 
 class Tools:
@@ -20,20 +23,30 @@ class Tools:
         root: str | Path = ".",
         max_read_chars: int = 12_000,
         max_search_results: int = 20,
+        sandbox_backend: SandboxBackend | None | object = _AUTO_SANDBOX,
     ) -> None:
         self.root = Path(root).resolve()
         self.max_read_chars = max_read_chars
         self.max_search_results = max_search_results
+        tool_list: list[BaseTool] = [
+            ListFilesTool(),
+            ReadFileTool(max_chars=self.max_read_chars),
+            SearchTextTool(max_results=self.max_search_results),
+            WriteFileTool(),
+            EditFileTool(),
+        ]
+        self.startup_warnings: list[str] = []
+        if sandbox_backend is _AUTO_SANDBOX:
+            discovery = discover_linux_sandbox()
+            sandbox_backend = discovery.backend
+            if discovery.warning is not None:
+                self.startup_warnings.append(discovery.warning)
+        if sandbox_backend is not None:
+            tool_list.append(RunCommandTool(sandbox_backend))
+
         self.tools: dict[str, BaseTool] = {
             tool.name: tool
-            for tool in [
-                ListFilesTool(),
-                ReadFileTool(max_chars=self.max_read_chars),
-                SearchTextTool(max_results=self.max_search_results),
-                WriteFileTool(),
-                EditFileTool(),
-                RunCommandTool(),
-            ]
+            for tool in tool_list
         }
 
     def definitions(self) -> list[dict[str, object]]:
@@ -44,3 +57,6 @@ class Tools:
         if tool is None:
             return error(f"unknown tool: {name}")
         return tool.run(self.root, arguments)
+
+    def has(self, name: str) -> bool:
+        return name in self.tools

@@ -15,12 +15,13 @@ from textual.widgets import Input, Static
 
 from plain_agent.agent_loop import SimpleAgent
 from plain_agent.conversation_history import ContextSize
+from plain_agent.sandbox import CommandRequest
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
 from plain_agent.ui.textual_terminal.approval import PendingApproval, parse_approval_answer
 from plain_agent.ui.textual_terminal.rendering import (
-    APPROVAL_STYLE,
     USER_PROMPT_STYLE,
     format_auto_compaction,
+    format_command_approval,
     format_context_size,
     format_tool_result,
     format_welcome,
@@ -93,6 +94,8 @@ class PlainAgentTextualApp(App[None]):
         self._set_status("")
         self._set_context_status(self.agent.context_size())
         self.transcript.append(format_welcome())
+        for warning in self.agent.startup_warnings:
+            self.transcript.append(status_text("warning", warning, "yellow"))
         self.prompt_input.focus()
         self.agent.command_approver = self._approve_run_command
 
@@ -191,14 +194,14 @@ class PlainAgentTextualApp(App[None]):
     def _start_worker(self, target: Callable[..., None], *args: object) -> None:
         threading.Thread(target=target, args=args, daemon=True).start()
 
-    def _approve_run_command(self, command: str) -> bool:
+    def _approve_run_command(self, request: CommandRequest) -> bool:
         pending = PendingApproval()
 
         async def ask() -> None:
             await self.transcript.finish_assistant()
             self._pending_approval = pending
             self.prompt_input.value = ""
-            self.transcript.append(Text(f"[approval required] {command}", style=APPROVAL_STYLE))
+            self.transcript.append(format_command_approval(request))
             self.prompt_label.update("Approve command? [y/N] ")
             self._set_status("Command approval required")
             self.prompt_input.focus()

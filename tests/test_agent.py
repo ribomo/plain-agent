@@ -19,7 +19,18 @@ sys.modules.setdefault("openai.types.chat", fake_openai_chat_module)
 sys.modules.setdefault("openai.types.chat.chat_completion_chunk", fake_openai_chat_chunk_module)
 
 from plain_agent.agent_loop import SimpleAgent
+from plain_agent.sandbox import CommandRequest
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
+from plain_agent.tools.tools import Tools
+
+
+class PassthroughSandbox:
+    def build_command(self, request: CommandRequest) -> list[str]:
+        return list(request.argv)
+
+
+def command_tools(workspace: str = ".") -> Tools:
+    return Tools(workspace, sandbox_backend=PassthroughSandbox())
 
 
 def stream_chunk(content=None, tool_calls=None):
@@ -337,7 +348,7 @@ class SimpleAgentTest(unittest.TestCase):
                             index=0,
                             call_id="call_1",
                             name="run_command",
-                            arguments='{"command": "pwd"}',
+                            arguments='{"argv": ["/bin/pwd"]}',
                             call_type="function",
                         )
                     ]
@@ -345,7 +356,11 @@ class SimpleAgentTest(unittest.TestCase):
                 stream_response(["I will not run it."]),
             ]
         )
-        agent = SimpleAgent(llm_client=llm_client, model="test-model")
+        agent = SimpleAgent(
+            llm_client=llm_client,
+            model="test-model",
+            tools=command_tools(),
+        )
 
         events = list(agent.respond_stream("Run pwd"))
 
@@ -366,7 +381,7 @@ class SimpleAgentTest(unittest.TestCase):
                             index=0,
                             call_id="call_1",
                             name="run_command",
-                            arguments='{"command": "pwd"}',
+                            arguments='{"argv": ["/bin/pwd"]}',
                             call_type="function",
                         )
                     ]
@@ -377,12 +392,14 @@ class SimpleAgentTest(unittest.TestCase):
         agent = SimpleAgent(
             llm_client=llm_client,
             model="test-model",
-            command_approver=lambda command: approvals.append(command) or False,
+            command_approver=lambda request: approvals.append(request) or False,
+            tools=command_tools(),
         )
 
         events = list(agent.respond_stream("Run pwd"))
 
-        self.assertEqual(approvals, ["pwd"])
+        self.assertEqual([request.display for request in approvals], ["/bin/pwd"])
+        self.assertEqual(approvals[0].mode.value, "read-only")
         self.assertIsInstance(events[0], ToolResult)
         self.assertFalse(events[0].ok)
         tool_result = json.loads(agent.conversation_history[3]["content"])
@@ -400,7 +417,7 @@ class SimpleAgentTest(unittest.TestCase):
                                 index=0,
                                 call_id="call_1",
                                 name="run_command",
-                                arguments='{"command": "pwd"}',
+                                arguments='{"argv": ["/bin/pwd"], "mode": "workspace-write"}',
                                 call_type="function",
                             )
                         ]
@@ -411,13 +428,14 @@ class SimpleAgentTest(unittest.TestCase):
             agent = SimpleAgent(
                 llm_client=llm_client,
                 model="test-model",
-                workspace=temp_dir,
-                command_approver=lambda command: approvals.append(command) or True,
+                command_approver=lambda request: approvals.append(request) or True,
+                tools=command_tools(temp_dir),
             )
 
             events = list(agent.respond_stream("Run pwd"))
 
-        self.assertEqual(approvals, ["pwd"])
+        self.assertEqual([request.display for request in approvals], ["/bin/pwd"])
+        self.assertEqual(approvals[0].mode.value, "workspace-write")
         self.assertIsInstance(events[0], ToolResult)
         self.assertTrue(events[0].ok)
         tool_result = json.loads(agent.conversation_history[3]["content"])
