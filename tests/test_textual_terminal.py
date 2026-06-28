@@ -1,14 +1,17 @@
 import threading
 import unittest
+from pathlib import Path
 
 from rich.text import Text
 from textual.selection import SELECT_ALL
 
 from plain_agent.conversation_history import ContextSize
+from plain_agent.sandbox import CommandRequest, SandboxMode
 from plain_agent.streaming import TextDelta, ToolResult
 from plain_agent.ui.textual_terminal.approval import parse_approval_answer
 from plain_agent.ui.textual_terminal.app import PlainAgentTextualApp
 from plain_agent.ui.textual_terminal.rendering import (
+    format_command_approval,
     format_context_size,
     format_tool_result,
 )
@@ -16,6 +19,20 @@ from plain_agent.ui.textual_terminal.transcript import AssistantResponse, Transc
 
 
 class TextualTerminalTest(unittest.TestCase):
+    def test_format_command_approval_shows_mode_and_exact_quoted_argv(self) -> None:
+        rendered = format_command_approval(
+            CommandRequest(
+                ("bash", "-lc", "printf 'two words'"),
+                SandboxMode.WORKSPACE_WRITE,
+                Path.cwd(),
+            )
+        )
+
+        self.assertEqual(
+            rendered.plain,
+            "[approval required: workspace-write] bash -lc 'printf '\"'\"'two words'\"'\"''",
+        )
+
     def test_format_tool_result_uses_status_text(self) -> None:
         rendered = format_tool_result(
             ToolResult(
@@ -57,6 +74,18 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
                 "[context: ~0 tokens]",
             )
             self.assertEqual(app.context_status.region.right, app.screen.region.right)
+
+    async def test_sandbox_warning_is_shown_at_startup(self) -> None:
+        agent = _FakeAgent()
+        agent.startup_warnings = ["run_command is disabled: install Bubblewrap"]
+        app = PlainAgentTextualApp(agent)
+
+        async with app.run_test():
+            entries = [entry.plain_text for entry in app.query(TranscriptEntry)]
+            self.assertIn(
+                "[warning: run_command is disabled: install Bubblewrap]",
+                entries,
+            )
 
     async def test_prompt_can_release_focus(self) -> None:
         app = PlainAgentTextualApp(_FakeAgent())
@@ -258,6 +287,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
 
 class _FakeAgent:
     command_approver = None
+    startup_warnings = []
 
     def context_size(self) -> ContextSize:
         return ContextSize(message_count=0, char_count=0, byte_count=0)

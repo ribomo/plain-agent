@@ -2,15 +2,29 @@ import json
 import os
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
 
+from plain_agent.sandbox import CommandRequest
 from plain_agent.tools.list_files import ListFilesTool
 from plain_agent.tools.read_file import ReadFileTool
 from plain_agent.tools.search_text import SearchTextTool
 from plain_agent.tools.write_file import WriteFileTool
 from plain_agent.tools.edit_file import EditFileTool
 from plain_agent.tools.run_command import RunCommandTool
+from plain_agent.tools.command_runtime import CommandRuntime
 from plain_agent.tools.tools import Tools
+
+
+class PassthroughSandbox:
+    """Test backend that makes runtime behavior observable without Bubblewrap."""
+
+    def __init__(self) -> None:
+        self.requests: list[CommandRequest] = []
+
+    def build_command(self, request: CommandRequest) -> list[str]:
+        self.requests.append(request)
+        return list(request.argv)
 
 
 class ToolsTest(unittest.TestCase):
@@ -142,7 +156,7 @@ class ToolsTest(unittest.TestCase):
             self.assertEqual(result["entries"], ["README.md", "src/"])
 
     def test_tools_expose_definitions(self) -> None:
-        tools = Tools()
+        tools = Tools(sandbox_backend=PassthroughSandbox())
 
         definitions = tools.definitions()
         run_command_definition = definitions[-1]["function"]
@@ -151,121 +165,108 @@ class ToolsTest(unittest.TestCase):
             [definition["function"]["name"] for definition in definitions],
             ["list_files", "read_file", "search_text", "write_file", "edit_file", "run_command"],
         )
-        self.assertIn("Allowed commands", run_command_definition["description"])
-        self.assertIn("git status", run_command_definition["description"])
+        self.assertEqual(run_command_definition["parameters"]["required"], ["argv"])
+        self.assertEqual(
+            run_command_definition["parameters"]["properties"]["mode"]["enum"],
+            ["read-only", "workspace-write"],
+        )
 
-    def test_run_command_runs_allowed_command_in_workspace(self) -> None:
+    def test_run_command_runs_argv_in_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            tools = Tools(root=root)
+            sandbox = PassthroughSandbox()
+            tools = Tools(root=root, sandbox_backend=sandbox)
 
-            result = json.loads(tools.run("run_command", {"command": "pwd"}))
+            result = json.loads(tools.run("run_command", {"argv": ["/bin/pwd"]}))
 
             self.assertTrue(result["ok"])
             self.assertEqual(result["exit_code"], 0)
             self.assertEqual(result["stdout"].strip(), str(root))
             self.assertEqual(result["stderr"], "")
             self.assertFalse(result["timed_out"])
+            self.assertEqual(sandbox.requests[0].mode.value, "read-only")
 
     def test_run_command_reports_nonzero_exit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool()
+            tool = RunCommandTool(PassthroughSandbox())
 
-            result = json.loads(tool.run(Path(temp_dir), {"command": "ls missing-file"}))
+            result = json.loads(
+                tool.run(Path(temp_dir), {"argv": ["/bin/sh", "-c", "exit 7"]})
+            )
 
             self.assertFalse(result["ok"])
-            self.assertNotEqual(result["exit_code"], 0)
+            self.assertEqual(result["exit_code"], 7)
             self.assertFalse(result["timed_out"])
 
-    def test_run_command_rejects_invalid_command_argument(self) -> None:
+    def test_run_command_rejects_invalid_argv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool()
+            tool = RunCommandTool(PassthroughSandbox())
 
-            result = json.loads(tool.run(Path(temp_dir), {"command": ""}))
+            invalid_values = (None, [], [""], [1], ["echo", "bad\x00arg"])
+            results = [
+                json.loads(tool.run(Path(temp_dir), {"argv": value}))
+                for value in invalid_values
+            ]
+
+            self.assertTrue(all(not result["ok"] for result in results))
+            self.assertTrue(all("argv" in result["error"] for result in results))
+
+    def test_run_command_passes_arguments_without_shell_parsing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tool = RunCommandTool(PassthroughSandbox())
+
+            result = json.loads(
+                tool.run(Path(temp_dir), {"argv": ["/bin/echo", "one | two", ">", "out"]})
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["stdout"], "one | two > out\n")
+            self.assertFalse((Path(temp_dir) / "out").exists())
+
+    def test_run_command_accepts_explicit_shell_argv(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tool = RunCommandTool(PassthroughSandbox())
+
+            result = json.loads(
+                tool.run(Path(temp_dir), {"argv": ["/bin/bash", "-lc", "printf explicit-shell"]})
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(result["stdout"], "explicit-shell")
+
+    def test_run_command_preserves_requested_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sandbox = PassthroughSandbox()
+            tool = RunCommandTool(sandbox)
+
+            result = json.loads(
+                tool.run(
+                    Path(temp_dir),
+                    {"argv": ["/bin/true"], "mode": "workspace-write"},
+                )
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(sandbox.requests[0].mode.value, "workspace-write")
+
+    def test_run_command_rejects_unknown_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tool = RunCommandTool(PassthroughSandbox())
+
+            result = json.loads(
+                tool.run(Path(temp_dir), {"argv": ["/bin/true"], "mode": "unsafe"})
+            )
 
             self.assertFalse(result["ok"])
-            self.assertIn("command is required", result["error"])
-
-    def test_run_command_rejects_disallowed_commands(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool()
-
-            python_result = json.loads(tool.run(Path(temp_dir), {"command": "python --version"}))
-            rm_result = json.loads(tool.run(Path(temp_dir), {"command": "rm file.txt"}))
-            touch_result = json.loads(tool.run(Path(temp_dir), {"command": "touch file.txt"}))
-
-            self.assertFalse(python_result["ok"])
-            self.assertIn("command is not allowed: python", python_result["error"])
-            self.assertFalse(rm_result["ok"])
-            self.assertIn("command is not allowed: rm", rm_result["error"])
-            self.assertFalse(touch_result["ok"])
-            self.assertIn("command is not allowed: touch", touch_result["error"])
-
-    def test_run_command_rejects_shell_operators(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool()
-
-            pipe_result = json.loads(tool.run(Path(temp_dir), {"command": "ls | cat"}))
-            redirect_result = json.loads(tool.run(Path(temp_dir), {"command": "ls > out.txt"}))
-            chain_result = json.loads(tool.run(Path(temp_dir), {"command": "pwd && ls"}))
-
-            self.assertFalse(pipe_result["ok"])
-            self.assertIn("shell syntax is not allowed", pipe_result["error"])
-            self.assertFalse(redirect_result["ok"])
-            self.assertIn("shell syntax is not allowed", redirect_result["error"])
-            self.assertFalse(chain_result["ok"])
-            self.assertIn("shell syntax is not allowed", chain_result["error"])
-
-    def test_run_command_rejects_mutating_flags(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            target = root / "victim.txt"
-            target.write_text("keep", encoding="utf-8")
-            tool = RunCommandTool()
-
-            result = json.loads(tool.run(root, {"command": "find . -name victim.txt -delete"}))
-
-            self.assertFalse(result["ok"])
-            self.assertIn("command flag is not allowed: -delete", result["error"])
-            self.assertTrue(target.exists())
-
-    def test_run_command_rejects_path_arguments_outside_workspace(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            outside = root.parent / "outside-command-target.txt"
-            outside.write_text("secret", encoding="utf-8")
-            (root / "link.txt").symlink_to(outside)
-            tool = RunCommandTool()
-
-            try:
-                absolute_result = json.loads(tool.run(root, {"command": f"cat {outside}"}))
-                symlink_result = json.loads(tool.run(root, {"command": "cat link.txt"}))
-            finally:
-                outside.unlink(missing_ok=True)
-
-            self.assertFalse(absolute_result["ok"])
-            self.assertIn("outside workspace", absolute_result["error"])
-            self.assertFalse(symlink_result["ok"])
-            self.assertIn("outside workspace", symlink_result["error"])
-
-    def test_run_command_allows_read_only_git_subcommands(self) -> None:
-        tool = RunCommandTool()
-
-        status_result = json.loads(tool.run(Path.cwd(), {"command": "git status --short"}))
-        commit_result = json.loads(tool.run(Path.cwd(), {"command": "git commit --allow-empty -m test"}))
-
-        self.assertIn("exit_code", status_result)
-        self.assertFalse(status_result["timed_out"])
-        self.assertFalse(commit_result["ok"])
-        self.assertIn("git subcommand is not allowed: commit", commit_result["error"])
+            self.assertIn("mode", result["error"])
 
     def test_run_command_times_out(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             fifo_path = Path(temp_dir) / "stream"
             os.mkfifo(fifo_path)
-            tool = RunCommandTool(timeout_seconds=0.001)
+            tool = RunCommandTool(PassthroughSandbox(), timeout_seconds=0.001)
 
-            result = json.loads(tool.run(Path(temp_dir), {"command": "cat stream"}))
+            result = json.loads(tool.run(Path(temp_dir), {"argv": ["/bin/cat", "stream"]}))
 
             self.assertFalse(result["ok"])
             self.assertIsNone(result["exit_code"])
@@ -275,13 +276,23 @@ class ToolsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             (root / "long.txt").write_text("abcdef", encoding="utf-8")
-            tool = RunCommandTool(max_output_chars=3)
+            tool = RunCommandTool(PassthroughSandbox(), max_output_chars=3)
 
-            result = json.loads(tool.run(root, {"command": "cat long.txt"}))
+            result = json.loads(tool.run(root, {"argv": ["/bin/cat", "long.txt"]}))
 
             self.assertTrue(result["ok"])
             self.assertEqual(result["stdout"], "abc")
             self.assertTrue(result["truncated"])
+
+    def test_command_runtime_discards_output_beyond_retention_limit(self) -> None:
+        runtime = CommandRuntime(PassthroughSandbox(), max_output_chars=3)
+        chunks: list[str] = []
+        errors: list[Exception] = []
+
+        runtime._drain_output(StringIO("x" * 100_000), chunks, errors)
+
+        self.assertEqual("".join(chunks), "xxxx")
+        self.assertEqual(errors, [])
 
     def test_write_file_creates_new_file(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
