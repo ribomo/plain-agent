@@ -1,54 +1,60 @@
-"""Tool for running safe inspection commands in the workspace."""
+"""Tool for running OS-sandboxed commands in the workspace."""
 
 import json
 from pathlib import Path
 
+from plain_agent.sandbox import CommandRequest, SandboxBackend, SandboxConfigurationError
 from plain_agent.tools.base_tool import BaseTool
-from plain_agent.tools.command_policy import RUN_COMMAND_ALLOWED_COMMANDS_TEXT
 from plain_agent.tools.command_runtime import CommandRuntime, CommandRuntimeError
 from plain_agent.tools.utils import error
 
 
 class RunCommandTool(BaseTool):
-    """Run a small allowlisted command without shell syntax."""
-
-    # This tool is for trusted workspace inspection, not a full sandbox. It
-    # runs outside the WorkspacePermission file filters, so keep the command
-    # allowlist and argument checks conservative.
+    """Run an argv vector through the configured OS sandbox."""
 
     name = "run_command"
     description = (
-        "Run a safe inspection command inside the workspace. "
-        f"{RUN_COMMAND_ALLOWED_COMMANDS_TEXT}"
+        "Run an offline command in an OS sandbox. Commands receive read-only workspace access "
+        "unless mode is workspace-write. Pass an exact argv array; shell syntax works only when "
+        "you explicitly invoke a shell, for example ['bash', '-lc', '...']."
     )
     parameters = {
         "type": "object",
         "properties": {
-            "command": {
+            "argv": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+                "minItems": 1,
+                "description": "Exact executable and arguments. No implicit shell parsing is performed.",
+            },
+            "mode": {
                 "type": "string",
-                "description": (
-                    "Simple command to run. Shell syntax is not supported. "
-                    f"{RUN_COMMAND_ALLOWED_COMMANDS_TEXT}"
-                ),
+                "enum": ["read-only", "workspace-write"],
+                "default": "read-only",
+                "description": "Filesystem access granted to the workspace.",
             },
         },
-        "required": ["command"],
+        "required": ["argv"],
+        "additionalProperties": False,
     }
 
-    def __init__(self, timeout_seconds: float = 30, max_output_chars: int = 12_000) -> None:
+    def __init__(
+        self,
+        sandbox: SandboxBackend,
+        timeout_seconds: float = 30,
+        max_output_chars: int = 12_000,
+    ) -> None:
         self.runtime = CommandRuntime(
+            sandbox=sandbox,
             timeout_seconds=timeout_seconds,
             max_output_chars=max_output_chars,
         )
 
     def run(self, root: Path, arguments: dict[str, object]) -> str:
-        command = arguments.get("command")
-        if not isinstance(command, str) or not command.strip():
-            return error("command is required")
-
         try:
-            result = self.runtime.run(root, command)
-        except CommandRuntimeError as exc:
+            request = CommandRequest.from_arguments(root, arguments)
+            result = self.runtime.run(request)
+        except (CommandRuntimeError, SandboxConfigurationError) as exc:
             return error(str(exc))
 
         return json.dumps(result.to_dict())

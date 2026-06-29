@@ -8,6 +8,7 @@ from plain_agent.compaction import ConversationCompactor
 from plain_agent.conversation_history import ContextSize, ConversationHistory, estimate_token_count
 from plain_agent.message_types import ToolCallDict
 from plain_agent.prompt import INITIAL_PROMPT
+from plain_agent.sandbox import CommandRequest, SandboxConfigurationError
 from plain_agent.streaming import (
     AutoCompaction,
     ChatCompletionStreamAccumulator,
@@ -26,9 +27,10 @@ class SimpleAgent:
         model: str,
         workspace: str = ".",
         max_turns: int = 10,
-        command_approver: Callable[[str], bool] | None = None,
+        command_approver: Callable[[CommandRequest], bool] | None = None,
         compactor: ConversationCompactor | None = None,
         auto_compact_max_tokens: int | None = None,
+        tools: Tools | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.model = model
@@ -36,7 +38,8 @@ class SimpleAgent:
         self.command_approver = command_approver
         self.compactor = compactor
         self.auto_compact_max_tokens = auto_compact_max_tokens
-        self.tools = Tools(workspace)
+        self.tools = tools if tools is not None else Tools(workspace)
+        self.startup_warnings = self.tools.startup_warnings
         self.conversation_history = ConversationHistory(INITIAL_PROMPT)
 
     def respond_stream(self, user_input: str) -> Generator[TextDelta | ToolResult | AutoCompaction, None, None]:
@@ -112,19 +115,21 @@ class SimpleAgent:
             arguments = self._parse_tool_arguments(tool_call["function"]["arguments"])
         except ValueError as exc:
             return error(str(exc))
-        user_approval = self._approve_run_command(arguments)
-        if name == "run_command" and not user_approval:
+        if not self._approve_run_command(name, arguments):
             return error("run_command was not approved")
         return self.tools.run(name, arguments)
 
-    def _approve_run_command(self, arguments: dict[str, object]) -> bool:
-        command = arguments.get("command")
-        if not isinstance(command, str) or not command.strip():
-            # Empty or invalid commands are blocked by the tool implementation.
+    def _approve_run_command(self, name: str, arguments: dict[str, object]) -> bool:
+        if name != "run_command" or not self.tools.has(name):
+            return True
+        try:
+            request = CommandRequest.from_arguments(self.tools.root, arguments)
+        except SandboxConfigurationError:
+            # Invalid requests are rejected by the tool without prompting.
             return True
         if self.command_approver is None:
             return False
-        return self.command_approver(command)
+        return self.command_approver(request)
 
     def _tool_result_ok(self, result: str) -> bool:
         try:

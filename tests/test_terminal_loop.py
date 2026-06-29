@@ -1,9 +1,11 @@
 from contextlib import redirect_stdout
 from io import StringIO
+from pathlib import Path
 import unittest
 from unittest.mock import patch
 
 from plain_agent.conversation_history import ContextSize
+from plain_agent.sandbox import CommandRequest, SandboxMode
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
 from plain_agent.terminal_loop import (
     approve_run_command,
@@ -18,6 +20,7 @@ class FakeAgent:
         self.compact_result = compact_result
         self.compact_calls = 0
         self.auto_compact = auto_compact
+        self.startup_warnings = []
 
     def respond_stream(self, user_input: str):
         self.prompts.append(user_input)
@@ -124,6 +127,20 @@ class TerminalLoopTest(unittest.TestCase):
 
         self.assertTrue(output.getvalue().endswith("\n\n"))
 
+    def test_run_interactive_terminal_shows_sandbox_warning(self) -> None:
+        agent = FakeAgent()
+        agent.startup_warnings = ["run_command is disabled: install Bubblewrap"]
+        output = StringIO()
+
+        with patch("builtins.input", side_effect=["exit"]):
+            with redirect_stdout(output):
+                run_interactive_terminal(agent)
+
+        self.assertIn(
+            "[warning: run_command is disabled: install Bubblewrap]",
+            output.getvalue(),
+        )
+
     def test_format_token_count_uses_k_suffix_for_large_counts(self) -> None:
         self.assertEqual(format_token_count(999), "999")
         self.assertEqual(format_token_count(2_100), "2.1k")
@@ -131,18 +148,37 @@ class TerminalLoopTest(unittest.TestCase):
     def test_approve_run_command_accepts_yes(self) -> None:
         output = StringIO()
 
-        with patch("builtins.input", side_effect=["maybe", "yes"]):
+        with patch("builtins.input", side_effect=["maybe", "yes"]) as mock_input:
             with redirect_stdout(output):
-                approved = approve_run_command("pwd")
+                approved = approve_run_command(
+                    CommandRequest(("pwd",), SandboxMode.READ_ONLY, Path.cwd())
+                )
 
         self.assertTrue(approved)
+        self.assertEqual(
+            mock_input.call_args_list[0].args[0],
+            "\nApprove [read-only] command `pwd`? [y/N] ",
+        )
         self.assertEqual(output.getvalue(), "Please answer y or n.\n")
 
     def test_approve_run_command_rejects_default(self) -> None:
         with patch("builtins.input", return_value=""):
-            approved = approve_run_command("pwd")
+            approved = approve_run_command(
+                CommandRequest(("pwd",), SandboxMode.WORKSPACE_WRITE, Path.cwd())
+            )
 
         self.assertFalse(approved)
+
+    def test_approve_run_command_escapes_terminal_controls(self) -> None:
+        with patch("builtins.input", return_value="") as mock_input:
+            approve_run_command(
+                CommandRequest(("printf", "\x1b[2K\rspoof"), SandboxMode.READ_ONLY, Path.cwd())
+            )
+
+        prompt = mock_input.call_args.args[0]
+        self.assertNotIn("\x1b", prompt)
+        self.assertNotIn("\r", prompt)
+        self.assertIn(r"\x1b[2K\rspoof", prompt)
 
 
 if __name__ == "__main__":

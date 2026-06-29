@@ -3,6 +3,7 @@
 from rich.text import Text
 
 from plain_agent.conversation_history import ContextSize, estimate_token_count
+from plain_agent.sandbox import CommandRequest
 from plain_agent.streaming import AutoCompaction, ToolResult
 from plain_agent.ui.terminal_renderer import format_token_count
 
@@ -41,6 +42,13 @@ def format_auto_compaction(event: AutoCompaction) -> Text:
         "conversation auto-compacted",
         f"~{before_tokens} -> ~{after_tokens} tokens",
         "#7dd3c7",
+    )
+
+
+def format_command_approval(request: CommandRequest) -> Text:
+    return Text(
+        f"[approval required: {request.mode.value}] {request.display}",
+        style=APPROVAL_STYLE,
     )
 
 

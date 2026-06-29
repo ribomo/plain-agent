@@ -2,14 +2,17 @@
 import sys
 
 from plain_agent.agent_loop import SimpleAgent
+from plain_agent.sandbox import CommandRequest
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
 from plain_agent.ui.terminal_renderer import TerminalRenderer
 
 
-def approve_run_command(command: str) -> bool:
-    """Ask the user whether a requested shell command may run."""
+def approve_run_command(request: CommandRequest) -> bool:
+    """Ask the user whether a requested sandboxed command may run."""
     while True:
-        answer = input(f"\nApprove command `{command}`? [y/N] ").strip().lower()
+        answer = input(
+            f"\nApprove [{request.mode.value}] command `{request.display}`? [y/N] "
+        ).strip().lower()
         if answer in {"y", "yes"}:
             return True
         if answer in {"", "n", "no"}:
@@ -32,6 +35,8 @@ def run_interactive_terminal(agent: SimpleAgent, renderer: TerminalRenderer | No
 def _run_basic_interactive_terminal(agent: SimpleAgent, renderer: TerminalRenderer) -> None:
     """Run the simple line-oriented terminal loop."""
     renderer.print_welcome()
+    for warning in agent.startup_warnings:
+        renderer.print_status("warning", warning, "yellow")
 
     while True:
         try:
