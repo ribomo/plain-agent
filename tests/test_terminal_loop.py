@@ -169,6 +169,17 @@ class TerminalLoopTest(unittest.TestCase):
 
         self.assertFalse(approved)
 
+    def test_approve_run_command_escapes_terminal_controls(self) -> None:
+        with patch("builtins.input", return_value="") as mock_input:
+            approve_run_command(
+                CommandRequest(("printf", "\x1b[2K\rspoof"), SandboxMode.READ_ONLY, Path.cwd())
+            )
+
+        prompt = mock_input.call_args.args[0]
+        self.assertNotIn("\x1b", prompt)
+        self.assertNotIn("\r", prompt)
+        self.assertIn(r"\x1b[2K\rspoof", prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -85,8 +85,10 @@ uv run plain-agent
 ## Command sandbox (Linux)
 
 Every `run_command` request requires user approval and still runs through Bubblewrap after it is
-approved. The approval prompt shows the exact shell-quoted argument vector and requested mode.
-Approval is a user decision; Bubblewrap is the independent OS enforcement boundary.
+approved. The approval prompt shows the requested mode and an unambiguous shell-quoted
+representation of the exact argument vector. Backslashes and non-printable characters are escaped
+so command arguments cannot rewrite the terminal prompt. Approval is a user decision; Bubblewrap
+is the independent OS enforcement boundary.
 
 Commands are passed as an argument array and never receive an implicit shell. For example,
 `["rg", "TODO", "."]` runs directly, while shell syntax must be explicit as
@@ -105,8 +107,8 @@ arbitrary parent variables are not inherited by commands.
 
 In `workspace-write`, existing `.git` and `.venv` directories are rebound read-only. `.agents`,
 `.codex`, and `.sandbox` are hidden. `.env` plus recognized private-key and certificate files are
-masked in both modes. In-process file tools continue to use their existing workspace permission
-checks and are not run through Bubblewrap.
+masked in both modes, as are existing pathname Unix sockets. In-process file tools continue to use
+their existing workspace permission checks and are not run through Bubblewrap.
 
 Additional toolchains can be exposed read-only with an OS-path-separated list of absolute,
 existing paths:

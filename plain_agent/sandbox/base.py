@@ -32,7 +32,7 @@ class CommandRequest:
 
     @property
     def display(self) -> str:
-        return shlex.join(self.argv)
+        return shlex.join(_escape_display_argument(value) for value in self.argv)
 
     @classmethod
     def from_arguments(cls, workspace: Path, arguments: dict[str, object]) -> "CommandRequest":
@@ -69,3 +69,17 @@ class SandboxBackend(Protocol):
 
     def build_command(self, request: CommandRequest) -> list[str]:
         """Return the host argv used to launch a sandboxed command."""
+
+
+def _escape_display_argument(value: str) -> str:
+    """Make an argv entry safe and unambiguous for terminal display."""
+    escaped: list[str] = []
+    for character in value:
+        if character == "\\":
+            escaped.append("\\\\")
+        elif character.isprintable():
+            escaped.append(character)
+        else:
+            # ascii() returns a quoted escape such as '\\x1b'; strip only the quotes.
+            escaped.append(ascii(character)[1:-1])
+    return "".join(escaped)

@@ -200,6 +200,34 @@ class LinuxSandboxIntegrationTest(unittest.TestCase):
             self.assertTrue(tcp["ok"])
             self.assertFalse(udp["ok"])
 
+    def test_pathname_unix_socket_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            socket_path = workspace / "service.sock"
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            listener.bind(str(socket_path))
+            listener.listen()
+            listener.settimeout(0.2)
+            script = (
+                "import socket,sys; "
+                "s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); "
+                "\ntry: s.connect(sys.argv[1])"
+                "\nexcept OSError: raise SystemExit(0)"
+                "\ns.send(b'x'); raise SystemExit(9)"
+            )
+
+            try:
+                result = self.run_command(
+                    workspace,
+                    ["python3", "-c", script, str(socket_path)],
+                )
+                with self.assertRaises(TimeoutError):
+                    listener.accept()
+            finally:
+                listener.close()
+
+            self.assertTrue(result["ok"])
+
     def test_explicit_shell_argv_works(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             result = self.run_command(

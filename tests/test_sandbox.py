@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import socket
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -14,6 +15,7 @@ from plain_agent.sandbox import (
 from plain_agent.sandbox.bubblewrap import (
     SandboxDiscovery,
     _find_bubblewrap,
+    _masked_workspace_paths,
     discover_linux_sandbox,
     parse_read_roots,
 )
@@ -37,6 +39,35 @@ class SandboxTypesTest(unittest.TestCase):
         request = CommandRequest.from_arguments(Path("."), {"argv": ["true"]})
 
         self.assertEqual(request.mode, SandboxMode.READ_ONLY)
+
+    def test_command_request_display_escapes_terminal_controls(self) -> None:
+        request = CommandRequest(
+            (
+                "printf",
+                "line\nnext",
+                "\x1b[2K",
+                "left\rright",
+                "\u202eabc",
+                "zero\u200bwidth",
+                r"\n",
+                "café",
+            ),
+            SandboxMode.READ_ONLY,
+            Path.cwd(),
+        )
+
+        self.assertTrue(request.display.isprintable())
+        self.assertIn(r"line\nnext", request.display)
+        self.assertIn(r"\x1b[2K", request.display)
+        self.assertIn(r"left\rright", request.display)
+        self.assertIn(r"\u202eabc", request.display)
+        self.assertIn(r"zero\u200bwidth", request.display)
+        self.assertIn(r"\\n", request.display)
+        self.assertIn("café", request.display)
+        self.assertNotEqual(
+            CommandRequest(("\n",), SandboxMode.READ_ONLY, Path.cwd()).display,
+            CommandRequest((r"\n",), SandboxMode.READ_ONLY, Path.cwd()).display,
+        )
 
     def test_command_request_rejects_invalid_values(self) -> None:
         invalid_arguments = (
@@ -132,6 +163,7 @@ class BubblewrapSandboxTest(unittest.TestCase):
                 "--unshare-ipc",
                 "--unshare-net",
                 "--unshare-uts",
+                "--disable-userns",
                 "--cap-drop",
                 "--clearenv",
             ):
@@ -188,6 +220,39 @@ class BubblewrapSandboxTest(unittest.TestCase):
                 backend.build_command(
                     CommandRequest(("true",), SandboxMode.READ_ONLY, workspace)
                 )
+
+    @unittest.skipUnless(hasattr(socket, "AF_UNIX"), "Unix sockets are unavailable")
+    def test_pathname_unix_sockets_are_masked(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            socket_path = workspace / "service.sock"
+            listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                listener.bind(str(socket_path))
+                backend = BubblewrapSandbox(Path("/usr/bin/bwrap"))
+
+                argv = backend.build_command(
+                    CommandRequest(("true",), SandboxMode.READ_ONLY, workspace)
+                )
+            finally:
+                listener.close()
+
+        self.assertContainsSequence(
+            argv,
+            ["--ro-bind", "/dev/null", str(socket_path)],
+        )
+
+    def test_workspace_path_inspection_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir).resolve()
+            (workspace / "ordinary.txt").write_text("content", encoding="utf-8")
+
+            with patch.object(Path, "lstat", side_effect=OSError("inspection denied")):
+                with self.assertRaisesRegex(
+                    SandboxConfigurationError,
+                    "could not inspect workspace protection path",
+                ):
+                    _masked_workspace_paths(workspace)
 
     def test_unavailable_backend_omits_run_command_and_keeps_file_tools(self) -> None:
         discovery = SandboxDiscovery(None, "run_command is disabled: install Bubblewrap")

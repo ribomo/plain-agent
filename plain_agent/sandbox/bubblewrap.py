@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import stat
 import subprocess
 import sys
 
@@ -95,31 +96,7 @@ class BubblewrapSandbox:
         if not workspace.is_dir():
             raise SandboxConfigurationError("workspace must be an existing directory")
 
-        args = [
-            str(self.executable),
-            "--die-with-parent",
-            "--new-session",
-            "--unshare-user",
-            "--unshare-pid",
-            "--unshare-ipc",
-            "--unshare-net",
-            "--unshare-uts",
-            "--unshare-cgroup-try",
-            "--cap-drop",
-            "ALL",
-            "--clearenv",
-            "--proc",
-            "/proc",
-            "--dev",
-            "/dev",
-            "--tmpfs",
-            "/tmp",
-            "--tmpfs",
-            "/run",
-            "--dir",
-            "/tmp/plain-agent-home",
-        ]
-
+        args = self._base_arguments()
         args.extend(self._system_mounts())
         for root in self.extra_read_roots:
             args.extend(("--ro-bind", str(root), str(root)))
@@ -133,6 +110,7 @@ class BubblewrapSandbox:
         return args
 
     def probe(self, timeout_seconds: float = 2) -> None:
+        # Use a trusted no-op executable to verify the complete sandbox can start.
         true_path = _first_existing(Path("/usr/bin/true"), Path("/bin/true"))
         if true_path is None:
             raise SandboxUnavailableError("Bubblewrap probe could not find the 'true' executable")
@@ -156,6 +134,33 @@ class BubblewrapSandbox:
         if completed.returncode != 0:
             detail = completed.stderr.strip() or f"exit code {completed.returncode}"
             raise SandboxUnavailableError(f"Bubblewrap probe failed: {detail}")
+
+    def _base_arguments(self) -> list[str]:
+        return [
+            str(self.executable),
+            "--die-with-parent",
+            "--new-session",
+            "--unshare-user",
+            "--disable-userns",
+            "--unshare-pid",
+            "--unshare-ipc",
+            "--unshare-net",
+            "--unshare-uts",
+            "--unshare-cgroup-try",
+            "--cap-drop",
+            "ALL",
+            "--clearenv",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--tmpfs",
+            "/tmp",
+            "--tmpfs",
+            "/run",
+            "--dir",
+            "/tmp/plain-agent-home",
+        ]
 
     def _system_mounts(self) -> list[str]:
         args: list[str] = []
@@ -238,7 +243,7 @@ class BubblewrapSandbox:
                 if path.exists():
                     args.extend(("--ro-bind", str(path), str(path)))
 
-        for path in _sensitive_workspace_files(workspace):
+        for path in _masked_workspace_paths(workspace):
             args.extend(("--ro-bind", "/dev/null", str(path)))
         return args
 
@@ -290,8 +295,8 @@ def parse_read_roots(value: str | None) -> tuple[Path, ...]:
     return _canonical_read_roots(tuple(roots))
 
 
-def _sensitive_workspace_files(workspace: Path) -> list[Path]:
-    sensitive: list[Path] = []
+def _masked_workspace_paths(workspace: Path) -> list[Path]:
+    masked: list[Path] = []
     skipped_dirs = set(HIDDEN_WORKSPACE_DIRS)
     for root, dirs, files in os.walk(
         workspace,
@@ -303,10 +308,24 @@ def _sensitive_workspace_files(workspace: Path) -> list[Path]:
         for name in files:
             lower_name = name.lower()
             path = root_path / name
-            if lower_name in SENSITIVE_FILE_NAMES or path.suffix.lower() in SENSITIVE_FILE_SUFFIXES:
-                _reject_protected_symlink(path)
-                sensitive.append(path)
-    return sorted(sensitive)
+            try:
+                path_mode = path.lstat().st_mode
+            except OSError as exc:
+                raise SandboxConfigurationError(
+                    f"could not inspect workspace protection path: {path}: {exc}"
+                ) from exc
+
+            is_sensitive = (
+                lower_name in SENSITIVE_FILE_NAMES
+                or path.suffix.lower() in SENSITIVE_FILE_SUFFIXES
+            )
+            if is_sensitive and stat.S_ISLNK(path_mode):
+                raise SandboxConfigurationError(
+                    f"protected sandbox path must not be a symlink: {path}"
+                )
+            if is_sensitive or stat.S_ISSOCK(path_mode):
+                masked.append(path)
+    return sorted(masked)
 
 
 def _contains(root: Path, path: Path) -> bool:

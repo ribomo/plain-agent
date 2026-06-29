@@ -33,6 +33,19 @@ class TextualTerminalTest(unittest.TestCase):
             "[approval required: workspace-write] bash -lc 'printf '\"'\"'two words'\"'\"''",
         )
 
+    def test_format_command_approval_escapes_terminal_controls(self) -> None:
+        rendered = format_command_approval(
+            CommandRequest(
+                ("printf", "\x1b[2K\rspoof"),
+                SandboxMode.READ_ONLY,
+                Path.cwd(),
+            )
+        )
+
+        self.assertNotIn("\x1b", rendered.plain)
+        self.assertNotIn("\r", rendered.plain)
+        self.assertIn(r"\x1b[2K\rspoof", rendered.plain)
+
     def test_format_tool_result_uses_status_text(self) -> None:
         rendered = format_tool_result(
             ToolResult(
