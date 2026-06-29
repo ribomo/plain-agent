@@ -2,9 +2,7 @@
 
 from openai import OpenAI
 
-
-OPENAI_BASE_URL = "https://api.openai.com/v1"
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+from plain_agent.providers import DEEPSEEK_BASE_URL, OPENAI_BASE_URL
 
 
 class LLMClientError(ValueError):
