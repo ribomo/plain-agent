@@ -4,6 +4,7 @@ import tempfile
 import types
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
 fake_openai_module = types.ModuleType("openai")
 fake_openai_types_module = types.ModuleType("openai.types")
@@ -21,7 +22,7 @@ sys.modules.setdefault("openai.types.chat.chat_completion_chunk", fake_openai_ch
 from plain_agent.agent_loop import SimpleAgent
 from plain_agent.sandbox import CommandRequest
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
-from plain_agent.tools.registry import ToolRegistry
+from plain_agent.tools.permissions.controller import ApprovalUI, PermissionController
 
 
 class PassthroughSandbox:
@@ -29,8 +30,30 @@ class PassthroughSandbox:
         return list(request.argv)
 
 
-def command_tool_registry(workspace: str = ".") -> ToolRegistry:
-    return ToolRegistry(workspace, sandbox_backend=PassthroughSandbox())
+class RecordingApprovalUI(ApprovalUI):
+    def __init__(self, approved: bool) -> None:
+        self.approved = approved
+        self.requests: list[CommandRequest] = []
+
+    def request_approval(self, request: CommandRequest) -> bool:
+        self.requests.append(request)
+        return self.approved
+
+
+def command_agent(
+    llm_client,
+    workspace: str = ".",
+    approval_ui: ApprovalUI | None = None,
+) -> SimpleAgent:
+    discovery = SimpleNamespace(backend=PassthroughSandbox(), warning=None)
+    with patch("plain_agent.tools.registry.discover_linux_sandbox", return_value=discovery):
+        agent = SimpleAgent(
+            llm_client=llm_client,
+            model="test-model",
+            workspace=workspace,
+            permission_controller=PermissionController(approval_ui),
+        )
+    return agent
 
 
 def stream_chunk(content=None, tool_calls=None):
@@ -356,11 +379,7 @@ class SimpleAgentTest(unittest.TestCase):
                 stream_response(["I will not run it."]),
             ]
         )
-        agent = SimpleAgent(
-            llm_client=llm_client,
-            model="test-model",
-            tool_registry=command_tool_registry(),
-        )
+        agent = command_agent(llm_client)
 
         events = list(agent.respond_stream("Run pwd"))
 
@@ -372,7 +391,7 @@ class SimpleAgentTest(unittest.TestCase):
         self.assertIn("not approved", tool_result["error"])
 
     def test_run_command_denial_returns_tool_error(self) -> None:
-        approvals = []
+        approval_ui = RecordingApprovalUI(approved=False)
         llm_client = FakeLLMClient(
             [
                 stream_response_with_tool_calls([
@@ -389,17 +408,15 @@ class SimpleAgentTest(unittest.TestCase):
                 stream_response(["Okay, I will not run it."]),
             ]
         )
-        agent = SimpleAgent(
-            llm_client=llm_client,
-            model="test-model",
-            command_approver=lambda request: approvals.append(request) or False,
-            tool_registry=command_tool_registry(),
+        agent = command_agent(
+            llm_client,
+            approval_ui=approval_ui,
         )
 
         events = list(agent.respond_stream("Run pwd"))
 
-        self.assertEqual([request.display for request in approvals], ["/bin/pwd"])
-        self.assertEqual(approvals[0].mode.value, "read-only")
+        self.assertEqual([request.display for request in approval_ui.requests], ["/bin/pwd"])
+        self.assertEqual(approval_ui.requests[0].mode.value, "read-only")
         self.assertIsInstance(events[0], ToolResult)
         self.assertFalse(events[0].ok)
         tool_result = json.loads(agent.conversation_history[3]["content"])
@@ -408,7 +425,7 @@ class SimpleAgentTest(unittest.TestCase):
 
     def test_run_command_approval_runs_tool(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            approvals = []
+            approval_ui = RecordingApprovalUI(approved=True)
             llm_client = FakeLLMClient(
                 [
                     stream_response_with_tool_calls([
@@ -425,17 +442,16 @@ class SimpleAgentTest(unittest.TestCase):
                     stream_response(["The command ran."]),
                 ]
             )
-            agent = SimpleAgent(
-                llm_client=llm_client,
-                model="test-model",
-                command_approver=lambda request: approvals.append(request) or True,
-                tool_registry=command_tool_registry(temp_dir),
+            agent = command_agent(
+                llm_client,
+                temp_dir,
+                approval_ui=approval_ui,
             )
 
             events = list(agent.respond_stream("Run pwd"))
 
-        self.assertEqual([request.display for request in approvals], ["/bin/pwd"])
-        self.assertEqual(approvals[0].mode.value, "workspace-write")
+        self.assertEqual([request.display for request in approval_ui.requests], ["/bin/pwd"])
+        self.assertEqual(approval_ui.requests[0].mode.value, "workspace-write")
         self.assertIsInstance(events[0], ToolResult)
         self.assertTrue(events[0].ok)
         tool_result = json.loads(agent.conversation_history[3]["content"])

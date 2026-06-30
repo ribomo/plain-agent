@@ -123,11 +123,11 @@ class ConversationCompactor:
         return [message for message in messages if not self._is_compaction_summary(message)]
 
     def _previous_summary_text(self, messages: list[ChatMessage]) -> str:
-        summaries = []
-        for message in messages:
-            if self._is_compaction_summary(message):
-                summaries.append(self._compaction_summary_body(message))
-        return "\n\n".join(summaries)
+        return "\n\n".join(
+            self._compaction_summary_body(message)
+            for message in messages
+            if self._is_compaction_summary(message)
+        )
 
     def _compaction_summary_body(self, message: ChatMessage) -> str:
         return str(message["content"])[len(COMPACTION_SUMMARY_PREFIX) :].strip()

@@ -1,4 +1,4 @@
-"""Textual application for the full-screen terminal UI."""
+"""Full-screen terminal application."""
 
 import os
 import threading
@@ -17,8 +17,8 @@ from plain_agent.agent_loop import SimpleAgent
 from plain_agent.conversation_history import ContextSize
 from plain_agent.sandbox import CommandRequest
 from plain_agent.streaming import AutoCompaction, TextDelta, ToolResult
-from plain_agent.ui.textual_terminal.approval import PendingApproval, parse_approval_answer
-from plain_agent.ui.textual_terminal.rendering import (
+from plain_agent.tools.permissions.controller import ApprovalUI
+from plain_agent.ui.rendering import (
     USER_PROMPT_STYLE,
     format_auto_compaction,
     format_command_approval,
@@ -27,7 +27,7 @@ from plain_agent.ui.textual_terminal.rendering import (
     format_welcome,
     status_text,
 )
-from plain_agent.ui.textual_terminal.transcript import TextualTranscript
+from plain_agent.ui.transcript import Transcript
 
 
 class TranscriptView(VerticalScroll):
@@ -54,8 +54,26 @@ class PromptInput(Input):
         self.app._set_prompt_active(False)
 
 
-class PlainAgentTextualApp(App[None]):
-    """Full-screen Textual UI for Plain Agent."""
+class PendingApproval:
+    """A command approval request waiting for bottom-prompt input."""
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.approved = False
+
+
+def parse_approval_answer(answer: str) -> bool | None:
+    """Parse command approval input."""
+    normalized = answer.strip().lower()
+    if normalized in {"y", "yes"}:
+        return True
+    if normalized in {"", "n", "no"}:
+        return False
+    return None
+
+
+class PlainAgentApp(App[None], ApprovalUI):
+    """Full-screen terminal UI for Plain Agent."""
 
     CSS_PATH = "terminal.tcss"
     BINDINGS = [("ctrl+d", "quit", "Quit")]
@@ -63,7 +81,7 @@ class PlainAgentTextualApp(App[None]):
     def __init__(self, agent: SimpleAgent) -> None:
         super().__init__()
         self.agent = agent
-        self.transcript: TextualTranscript
+        self.transcript: Transcript
         self.status: Static
         self.context_status: Static
         self.prompt_row: Horizontal
@@ -72,7 +90,7 @@ class PlainAgentTextualApp(App[None]):
         self._responding = False
         self._compacting = False
         self._pending_approval: PendingApproval | None = None
-        self._old_command_approver = agent.command_approver
+        self.agent.permission_controller.set_approval_ui(self)
 
     def compose(self) -> ComposeResult:
         yield TranscriptView(id="transcript")
@@ -85,7 +103,7 @@ class PlainAgentTextualApp(App[None]):
                 yield Static("", id="context-status")
 
     def on_mount(self) -> None:
-        self.transcript = TextualTranscript(self.query_one("#transcript", VerticalScroll))
+        self.transcript = Transcript(self.query_one("#transcript", VerticalScroll))
         self.status = self.query_one("#status", Static)
         self.context_status = self.query_one("#context-status", Static)
         self.prompt_row = self.query_one("#prompt-row", Horizontal)
@@ -97,14 +115,13 @@ class PlainAgentTextualApp(App[None]):
         for warning in self.agent.startup_warnings:
             self.transcript.append(status_text("warning", warning, "yellow"))
         self.prompt_input.focus()
-        self.agent.command_approver = self._approve_run_command
 
     async def on_unmount(self) -> None:
         if self._pending_approval is not None:
             self._pending_approval.done.set()
         if hasattr(self, "transcript"):
             await self.transcript.finish_assistant()
-        self.agent.command_approver = self._old_command_approver
+        self.agent.permission_controller.set_approval_ui(None)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         event.stop()
@@ -166,13 +183,14 @@ class PlainAgentTextualApp(App[None]):
         if error_message is not None:
             self.transcript.append(status_text("conversation compact error", error_message, "bold red"))
             self._set_status("Conversation compaction failed.")
-        elif compacted:
+            return
+
+        if compacted:
             self.transcript.append(status_text("conversation", "compacted", "green"))
             self._set_context_status(self.agent.context_size())
-            self._set_status("")
         else:
             self.transcript.append(status_text("conversation compact", "nothing to compact", "yellow"))
-            self._set_status("")
+        self._set_status("")
 
     def _handle_agent_events(self, user_input: str) -> None:
         error_message: str | None = None
@@ -194,7 +212,8 @@ class PlainAgentTextualApp(App[None]):
     def _start_worker(self, target: Callable[..., None], *args: object) -> None:
         threading.Thread(target=target, args=args, daemon=True).start()
 
-    def _approve_run_command(self, request: CommandRequest) -> bool:
+    def request_approval(self, request: CommandRequest) -> bool:
+        """Ask for command approval through the terminal prompt."""
         pending = PendingApproval()
 
         async def ask() -> None:

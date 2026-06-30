@@ -1,4 +1,4 @@
-"""Rich renderables for the Textual terminal UI."""
+"""Rich renderables for the terminal UI."""
 
 from rich.text import Text
 

@@ -6,6 +6,7 @@ from plain_agent.sandbox import SandboxBackend, discover_linux_sandbox
 from plain_agent.tools.base_tool import BaseTool
 from plain_agent.tools.edit_file import EditFileTool
 from plain_agent.tools.list_files import ListFilesTool
+from plain_agent.tools.permissions.controller import PermissionController
 from plain_agent.tools.read_file import ReadFileTool
 from plain_agent.tools.run_command import RunCommandTool
 from plain_agent.tools.search_text import SearchTextTool
@@ -24,10 +25,12 @@ class ToolRegistry:
         max_read_chars: int = 12_000,
         max_search_results: int = 20,
         sandbox_backend: SandboxBackend | None | object = _AUTO_SANDBOX,
+        permission_controller: PermissionController | None = None,
     ) -> None:
         self.root = Path(root).resolve()
         self.max_read_chars = max_read_chars
         self.max_search_results = max_search_results
+        self.permission_controller = permission_controller or PermissionController()
         registered_tools: list[BaseTool] = [
             ListFilesTool(),
             ReadFileTool(max_chars=self.max_read_chars),
@@ -42,7 +45,9 @@ class ToolRegistry:
             if discovery.warning is not None:
                 self.startup_warnings.append(discovery.warning)
         if sandbox_backend is not None:
-            registered_tools.append(RunCommandTool(sandbox_backend))
+            registered_tools.append(
+                RunCommandTool(sandbox_backend, self.permission_controller)
+            )
 
         self._tools: dict[str, BaseTool] = {
             tool.name: tool

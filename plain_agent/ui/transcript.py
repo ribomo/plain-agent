@@ -1,4 +1,4 @@
-"""Incremental transcript rendering for the Textual terminal UI."""
+"""Incremental transcript rendering for the terminal UI."""
 
 from rich.text import Text
 from textual.await_complete import AwaitComplete
@@ -42,7 +42,7 @@ class AssistantResponse(Markdown):
             self._stream = None
 
 
-class TextualTranscript:
+class Transcript:
     """Manage transcript entries and in-flight assistant text."""
 
     def __init__(self, log: VerticalScroll) -> None:

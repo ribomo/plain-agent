@@ -9,7 +9,7 @@ from plain_agent.compaction import (
 )
 from plain_agent.config import AppConfig
 from plain_agent.llm_client import OpenAICompatibleClient
-from plain_agent.ui.textual_terminal import run_textual_terminal
+from plain_agent.ui.app import PlainAgentApp
 
 
 def main() -> None:
@@ -36,4 +36,4 @@ def main() -> None:
         auto_compact_max_tokens=config.compaction.auto_max_tokens,
     )
 
-    run_textual_terminal(agent)
+    PlainAgentApp(agent).run()

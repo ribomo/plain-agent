@@ -6,6 +6,10 @@ from pathlib import Path
 from plain_agent.sandbox import CommandRequest, SandboxBackend, SandboxConfigurationError
 from plain_agent.tools.base_tool import BaseTool
 from plain_agent.tools.command_runtime import CommandRuntime, CommandRuntimeError
+from plain_agent.tools.permissions.controller import (
+    PermissionController,
+    ApprovalDeniedError,
+)
 from plain_agent.tools.utils import error
 
 
@@ -41,9 +45,11 @@ class RunCommandTool(BaseTool):
     def __init__(
         self,
         sandbox: SandboxBackend,
+        permission_controller: PermissionController | None = None,
         timeout_seconds: float = 30,
         max_output_chars: int = 12_000,
     ) -> None:
+        self.permission_controller = permission_controller or PermissionController()
         self.runtime = CommandRuntime(
             sandbox=sandbox,
             timeout_seconds=timeout_seconds,
@@ -53,7 +59,10 @@ class RunCommandTool(BaseTool):
     def run(self, root: Path, arguments: dict[str, object]) -> str:
         try:
             request = CommandRequest.from_arguments(root, arguments)
+            self.permission_controller.require_approval(request)
             result = self.runtime.run(request)
+        except ApprovalDeniedError:
+            return error("run_command was not approved")
         except (CommandRuntimeError, SandboxConfigurationError) as exc:
             return error(str(exc))
 

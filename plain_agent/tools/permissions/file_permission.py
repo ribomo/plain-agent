@@ -5,6 +5,7 @@ from pathlib import Path
 IGNORED_DIRS = {".agents", ".codex", ".git", ".sandbox", ".venv", "__pycache__"}
 SENSITIVE_FILE_NAMES = {".env", "id_dsa", "id_ecdsa", "id_ed25519", "id_rsa"}
 SENSITIVE_FILE_SUFFIXES = {".key", ".pem", ".p12", ".pfx"}
+BLOCKED_PATH_NAMES = IGNORED_DIRS | SENSITIVE_FILE_NAMES
 
 
 class FilePermissionError(PermissionError):
@@ -19,18 +20,17 @@ class WorkspacePermission:
 
     def _resolve_to_absolute_path(self, path: Path) -> Path:
         try:
-            if path.is_absolute():
-                return path.resolve()
-            return (self.workspace / path).resolve()
+            unresolved = path if path.is_absolute() else self.workspace / path
+            return unresolved.resolve()
         except (OSError, RuntimeError) as exc:
             raise FilePermissionError(f"path could not be resolved: {path}") from exc
 
     def is_sensitive_path(self, relative_path: Path) -> bool:
-        for part in relative_path.parts:
-            lower_part = part.lower()
-            if lower_part in IGNORED_DIRS or lower_part in SENSITIVE_FILE_NAMES:
-                return True
-        return relative_path.suffix.lower() in SENSITIVE_FILE_SUFFIXES
+        blocked_part = any(
+            part.lower() in BLOCKED_PATH_NAMES
+            for part in relative_path.parts
+        )
+        return blocked_part or relative_path.suffix.lower() in SENSITIVE_FILE_SUFFIXES
 
     def require_access(self, path: str | Path, must_exist: bool = True) -> Path:
         try:
@@ -60,7 +60,7 @@ class WorkspacePermission:
                 continue
 
             relative_path = child.relative_to(self.workspace)
-            if child.name in IGNORED_DIRS or self.is_sensitive_path(relative_path):
+            if self.is_sensitive_path(relative_path):
                 continue
 
             if child.is_dir():
@@ -81,7 +81,7 @@ class WorkspacePermission:
         self,
         absolute_path: Path,
         original_path: str | Path,
-        must_exist: bool = True,
+        must_exist: bool,
     ) -> None:
         try:
             path_exists = absolute_path.exists()

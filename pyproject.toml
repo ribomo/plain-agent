@@ -24,4 +24,4 @@ plain-agent = "plain_agent.cli:main"
 include = ["plain_agent*"]
 
 [tool.setuptools.package-data]
-"plain_agent.ui.textual_terminal" = ["*.tcss"]
+"plain_agent.ui" = ["*.tcss"]

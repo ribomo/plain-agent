@@ -2,19 +2,19 @@
 
 from collections.abc import Iterable
 import json
-from typing import Any, Callable, Generator
+from typing import Any, Generator
 
 from plain_agent.compaction import ConversationCompactor
 from plain_agent.conversation_history import ContextSize, ConversationHistory, estimate_token_count
 from plain_agent.message_types import ToolCallDict
 from plain_agent.prompt import INITIAL_PROMPT
-from plain_agent.sandbox import CommandRequest, SandboxConfigurationError
 from plain_agent.streaming import (
     AutoCompaction,
     ChatCompletionStreamAccumulator,
     TextDelta,
     ToolResult,
 )
+from plain_agent.tools.permissions.controller import PermissionController
 from plain_agent.tools.registry import ToolRegistry
 from plain_agent.tools.utils import error
 
@@ -28,19 +28,19 @@ class SimpleAgent:
         model: str,
         workspace: str = ".",
         max_turns: int = 10,
-        command_approver: Callable[[CommandRequest], bool] | None = None,
         compactor: ConversationCompactor | None = None,
         auto_compact_max_tokens: int | None = None,
-        tool_registry: ToolRegistry | None = None,
+        permission_controller: PermissionController | None = None,
     ) -> None:
         self.llm_client = llm_client
         self.model = model
         self.max_turns = max_turns
-        self.command_approver = command_approver
         self.compactor = compactor
         self.auto_compact_max_tokens = auto_compact_max_tokens
-        self.tool_registry = (
-            tool_registry if tool_registry is not None else ToolRegistry(workspace)
+        self.permission_controller = permission_controller or PermissionController()
+        self.tool_registry = ToolRegistry(
+            workspace,
+            permission_controller=self.permission_controller,
         )
         self.startup_warnings = self.tool_registry.startup_warnings
         self.conversation_history = ConversationHistory(INITIAL_PROMPT)
@@ -118,21 +118,7 @@ class SimpleAgent:
             arguments = self._parse_tool_arguments(tool_call["function"]["arguments"])
         except ValueError as exc:
             return error(str(exc))
-        if not self._approve_run_command(name, arguments):
-            return error("run_command was not approved")
         return self.tool_registry.run(name, arguments)
-
-    def _approve_run_command(self, name: str, arguments: dict[str, object]) -> bool:
-        if name != "run_command" or not self.tool_registry.has(name):
-            return True
-        try:
-            request = CommandRequest.from_arguments(self.tool_registry.root, arguments)
-        except SandboxConfigurationError:
-            # Invalid requests are rejected by the tool without prompting.
-            return True
-        if self.command_approver is None:
-            return False
-        return self.command_approver(request)
 
     def _tool_result_ok(self, result: str) -> bool:
         try:

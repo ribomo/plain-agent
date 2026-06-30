@@ -8,17 +8,17 @@ from textual.selection import SELECT_ALL
 from plain_agent.conversation_history import ContextSize
 from plain_agent.sandbox import CommandRequest, SandboxMode
 from plain_agent.streaming import TextDelta, ToolResult
-from plain_agent.ui.textual_terminal.approval import parse_approval_answer
-from plain_agent.ui.textual_terminal.app import PlainAgentTextualApp
-from plain_agent.ui.textual_terminal.rendering import (
+from plain_agent.tools.permissions.controller import PermissionController
+from plain_agent.ui.app import PlainAgentApp, parse_approval_answer
+from plain_agent.ui.rendering import (
     format_command_approval,
     format_context_size,
     format_tool_result,
 )
-from plain_agent.ui.textual_terminal.transcript import AssistantResponse, TranscriptEntry
+from plain_agent.ui.transcript import AssistantResponse, TranscriptEntry
 
 
-class TextualTerminalTest(unittest.TestCase):
+class TerminalRenderingTest(unittest.TestCase):
     def test_format_command_approval_shows_mode_and_exact_quoted_argv(self) -> None:
         rendered = format_command_approval(
             CommandRequest(
@@ -77,9 +77,9 @@ class TextualTerminalTest(unittest.TestCase):
         self.assertIsNone(parse_approval_answer("maybe"))
 
 
-class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
+class PlainAgentAppTest(unittest.IsolatedAsyncioTestCase):
     async def test_context_status_is_shown_at_startup(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test():
             self.assertEqual(
@@ -91,7 +91,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
     async def test_sandbox_warning_is_shown_at_startup(self) -> None:
         agent = _FakeAgent()
         agent.startup_warnings = ["run_command is disabled: install Bubblewrap"]
-        app = PlainAgentTextualApp(agent)
+        app = PlainAgentApp(agent)
 
         async with app.run_test():
             entries = [entry.plain_text for entry in app.query(TranscriptEntry)]
@@ -101,7 +101,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_prompt_can_release_focus(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test() as pilot:
             self.assertIs(app.focused, app.prompt_input)
@@ -113,7 +113,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(app.prompt_row.has_class("active"))
 
     async def test_busy_submission_preserves_prompt_text(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test():
             app._responding = True
@@ -125,7 +125,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.status.render().plain, "Assistant is still responding.")
 
     async def test_wrapped_entry_selection_uses_logical_offsets(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test(size=(30, 12)) as pilot:
             app.transcript.append(Text("abcdefghijklmnopqrstuvwxyz" * 4))
@@ -139,7 +139,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertIs(app.focused, app.prompt_input)
 
     async def test_selection_handles_wide_unicode_characters(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test(size=(30, 12)) as pilot:
             app.transcript.append(Text("🙂abcdef"))
@@ -151,7 +151,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.screen.get_selected_text(), "ab")
 
     async def test_markdown_selection_is_partial_and_visible(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test(size=(50, 12)) as pilot:
             await app.transcript.update_assistant("**assistant bold text**")
@@ -169,7 +169,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertIs(app.focused, app.prompt_input)
 
     async def test_selection_spans_plain_and_markdown_entries(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test(size=(50, 14)) as pilot:
             app.transcript.append(Text("before entry"))
@@ -185,7 +185,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.screen.get_selected_text(), "ore entry\nassistan")
 
     async def test_transcript_copy_wins_while_prompt_keeps_focus(self) -> None:
-        app = PlainAgentTextualApp(_FakeAgent())
+        app = PlainAgentApp(_FakeAgent())
 
         async with app.run_test(size=(50, 12)) as pilot:
             app.prompt_input.value = "prompt selection"
@@ -206,7 +206,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app._clipboard, "prompt selection")
 
     async def test_streaming_does_not_override_manual_scroll(self) -> None:
-        app = PlainAgentTextualApp(_StreamingAgent())
+        app = PlainAgentApp(_StreamingAgent())
 
         async with app.run_test(size=(40, 10)) as pilot:
             for index in range(30):
@@ -224,7 +224,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_compaction_runs_without_blocking_the_ui(self) -> None:
         agent = _BlockingCompactionAgent()
-        app = PlainAgentTextualApp(agent)
+        app = PlainAgentApp(agent)
 
         async with app.run_test() as pilot:
             app._submit_prompt("/compact")
@@ -256,7 +256,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_response_failure_is_rendered_in_transcript(self) -> None:
-        app = PlainAgentTextualApp(_FailingAgent())
+        app = PlainAgentApp(_FailingAgent())
 
         async with app.run_test() as pilot:
             app._submit_prompt("Hello")
@@ -271,7 +271,7 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(app.context_status.render().plain, "[context: ~25 tokens]")
 
     async def test_background_stream_updates_incremental_markdown(self) -> None:
-        app = PlainAgentTextualApp(_StreamingAgent())
+        app = PlainAgentApp(_StreamingAgent())
 
         async with app.run_test() as pilot:
             welcome = app.query_one(TranscriptEntry)
@@ -299,8 +299,10 @@ class TextualTerminalAppTest(unittest.IsolatedAsyncioTestCase):
 
 
 class _FakeAgent:
-    command_approver = None
     startup_warnings = []
+
+    def __init__(self) -> None:
+        self.permission_controller = PermissionController()
 
     def context_size(self) -> ContextSize:
         return ContextSize(message_count=0, char_count=0, byte_count=0)
@@ -308,6 +310,7 @@ class _FakeAgent:
 
 class _FailingAgent(_FakeAgent):
     def __init__(self) -> None:
+        super().__init__()
         self.failed = False
 
     def respond_stream(self, user_input: str):
@@ -331,6 +334,7 @@ class _StreamingAgent(_FakeAgent):
 
 class _BlockingCompactionAgent(_StreamingAgent):
     def __init__(self) -> None:
+        super().__init__()
         self.started = threading.Event()
         self.release = threading.Event()
 

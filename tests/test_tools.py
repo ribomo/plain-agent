@@ -15,6 +15,7 @@ from plain_agent.tools.write_file import WriteFileTool
 from plain_agent.tools.edit_file import EditFileTool
 from plain_agent.tools.run_command import RunCommandTool
 from plain_agent.tools.command_runtime import CommandRuntime
+from plain_agent.tools.permissions.controller import ApprovalUI, PermissionController
 from plain_agent.tools.registry import ToolRegistry
 
 
@@ -27,6 +28,19 @@ class PassthroughSandbox:
     def build_command(self, request: CommandRequest) -> list[str]:
         self.requests.append(request)
         return list(request.argv)
+
+
+class ApprovingUI(ApprovalUI):
+    def request_approval(self, request: CommandRequest) -> bool:
+        return True
+
+
+def approved_permissions() -> PermissionController:
+    return PermissionController(ApprovingUI())
+
+
+def run_command_tool(sandbox, **kwargs) -> RunCommandTool:
+    return RunCommandTool(sandbox, approved_permissions(), **kwargs)
 
 
 class ToolRegistryTest(unittest.TestCase):
@@ -177,7 +191,11 @@ class ToolRegistryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             sandbox = PassthroughSandbox()
-            tools = ToolRegistry(root=root, sandbox_backend=sandbox)
+            tools = ToolRegistry(
+                root=root,
+                sandbox_backend=sandbox,
+                permission_controller=approved_permissions(),
+            )
 
             result = json.loads(tools.run("run_command", {"argv": ["/bin/pwd"]}))
 
@@ -190,7 +208,7 @@ class ToolRegistryTest(unittest.TestCase):
 
     def test_run_command_does_not_inherit_stdin(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool(PassthroughSandbox())
+            tool = run_command_tool(PassthroughSandbox())
 
             with patch(
                 "plain_agent.tools.command_runtime.subprocess.Popen",
@@ -205,7 +223,7 @@ class ToolRegistryTest(unittest.TestCase):
 
     def test_run_command_reports_nonzero_exit(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool(PassthroughSandbox())
+            tool = run_command_tool(PassthroughSandbox())
 
             result = json.loads(
                 tool.run(Path(temp_dir), {"argv": ["/bin/sh", "-c", "exit 7"]})
@@ -217,7 +235,7 @@ class ToolRegistryTest(unittest.TestCase):
 
     def test_run_command_rejects_invalid_argv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool(PassthroughSandbox())
+            tool = run_command_tool(PassthroughSandbox())
 
             invalid_values = (None, [], [""], [1], ["echo", "bad\x00arg"])
             results = [
@@ -230,7 +248,7 @@ class ToolRegistryTest(unittest.TestCase):
 
     def test_run_command_passes_arguments_without_shell_parsing(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool(PassthroughSandbox())
+            tool = run_command_tool(PassthroughSandbox())
 
             result = json.loads(
                 tool.run(Path(temp_dir), {"argv": ["/bin/echo", "one | two", ">", "out"]})
@@ -242,7 +260,7 @@ class ToolRegistryTest(unittest.TestCase):
 
     def test_run_command_accepts_explicit_shell_argv(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool(PassthroughSandbox())
+            tool = run_command_tool(PassthroughSandbox())
 
             result = json.loads(
                 tool.run(Path(temp_dir), {"argv": ["/bin/bash", "-lc", "printf explicit-shell"]})
@@ -254,7 +272,7 @@ class ToolRegistryTest(unittest.TestCase):
     def test_run_command_preserves_requested_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             sandbox = PassthroughSandbox()
-            tool = RunCommandTool(sandbox)
+            tool = run_command_tool(sandbox)
 
             result = json.loads(
                 tool.run(
@@ -268,7 +286,7 @@ class ToolRegistryTest(unittest.TestCase):
 
     def test_run_command_rejects_unknown_mode(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            tool = RunCommandTool(PassthroughSandbox())
+            tool = run_command_tool(PassthroughSandbox())
 
             result = json.loads(
                 tool.run(Path(temp_dir), {"argv": ["/bin/true"], "mode": "unsafe"})
@@ -281,7 +299,7 @@ class ToolRegistryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             fifo_path = Path(temp_dir) / "stream"
             os.mkfifo(fifo_path)
-            tool = RunCommandTool(PassthroughSandbox(), timeout_seconds=0.001)
+            tool = run_command_tool(PassthroughSandbox(), timeout_seconds=0.001)
 
             result = json.loads(tool.run(Path(temp_dir), {"argv": ["/bin/cat", "stream"]}))
 
@@ -293,7 +311,7 @@ class ToolRegistryTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             (root / "long.txt").write_text("abcdef", encoding="utf-8")
-            tool = RunCommandTool(PassthroughSandbox(), max_output_chars=3)
+            tool = run_command_tool(PassthroughSandbox(), max_output_chars=3)
 
             result = json.loads(tool.run(root, {"argv": ["/bin/cat", "long.txt"]}))
 

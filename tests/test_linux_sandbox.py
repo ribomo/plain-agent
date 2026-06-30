@@ -7,9 +7,15 @@ import time
 import unittest
 from unittest.mock import patch
 
-from plain_agent.sandbox import SandboxMode
+from plain_agent.sandbox import CommandRequest, SandboxMode
 from plain_agent.sandbox.bubblewrap import BubblewrapSandbox, discover_linux_sandbox
+from plain_agent.tools.permissions.controller import ApprovalUI, PermissionController
 from plain_agent.tools.run_command import RunCommandTool
+
+
+class ApprovingUI(ApprovalUI):
+    def request_approval(self, request: CommandRequest) -> bool:
+        return True
 
 
 class LinuxSandboxIntegrationTest(unittest.TestCase):
@@ -30,6 +36,7 @@ class LinuxSandboxIntegrationTest(unittest.TestCase):
     ) -> dict[str, object]:
         tool = RunCommandTool(
             self.backend,
+            PermissionController(ApprovingUI()),
             timeout_seconds=timeout_seconds,
             max_output_chars=max_output_chars,
         )
@@ -93,7 +100,7 @@ class LinuxSandboxIntegrationTest(unittest.TestCase):
             target = toolchain / "version.txt"
             target.write_text("toolchain data", encoding="utf-8")
             backend = BubblewrapSandbox(self.backend.executable, (toolchain.resolve(),))
-            tool = RunCommandTool(backend)
+            tool = RunCommandTool(backend, PermissionController(ApprovingUI()))
 
             read = json.loads(tool.run(workspace, {"argv": ["cat", str(target)]}))
             write = json.loads(
