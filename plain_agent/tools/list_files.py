@@ -3,7 +3,10 @@
 from pathlib import Path
 
 from plain_agent.tools.base_tool import BaseTool
-from plain_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
+from plain_agent.tools.permissions.file_permission import (
+    FilePermissionError,
+    WorkspacePermission,
+)
 from plain_agent.tools.utils import error, ok
 
 
@@ -34,8 +37,13 @@ class ListFilesTool(BaseTool):
         if not workspace_path.is_dir():
             return error(f"path is not a directory: {path}")
 
+        try:
+            children = sorted(workspace_path.iterdir())
+        except OSError as exc:
+            return error(f"could not list directory: {exc}")
+
         entries = []
-        for child in sorted(workspace_path.iterdir()):
+        for child in children:
             relative_path = child.relative_to(permissions.workspace)
             if permissions.is_sensitive_path(relative_path):
                 continue

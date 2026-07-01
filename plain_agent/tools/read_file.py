@@ -3,7 +3,10 @@
 from pathlib import Path
 
 from plain_agent.tools.base_tool import BaseTool
-from plain_agent.tools.permissions.file_permission import FilePermissionError, WorkspacePermission
+from plain_agent.tools.permissions.file_permission import (
+    FilePermissionError,
+    WorkspacePermission,
+)
 from plain_agent.tools.utils import error, ok
 
 
@@ -24,6 +27,8 @@ class ReadFileTool(BaseTool):
     }
 
     def __init__(self, max_chars: int = 12_000) -> None:
+        if max_chars < 1:
+            raise ValueError("max_chars must be positive")
         self.max_chars = max_chars
 
     def run(self, root: Path, arguments: dict[str, object]) -> str:
@@ -41,7 +46,8 @@ class ReadFileTool(BaseTool):
             return error(f"path is not a file: {path}")
 
         try:
-            text = workspace_path.read_text(encoding="utf-8")
+            with workspace_path.open(encoding="utf-8") as file:
+                text = file.read(self.max_chars + 1)
         except UnicodeDecodeError:
             return error(f"file is not valid UTF-8 text: {path}")
         except OSError as exc:

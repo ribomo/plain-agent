@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import mock_open, patch
 
 from plain_agent.sandbox import CommandRequest
 from plain_agent.tools.base_tool import BaseTool
@@ -78,6 +78,22 @@ class ToolRegistryTest(unittest.TestCase):
 
             self.assertFalse(result["ok"])
             self.assertIn("does not exist", result["error"])
+
+    def test_read_file_only_reads_through_the_character_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            path = root / "large.txt"
+            path.write_text("placeholder", encoding="utf-8")
+            opened = mock_open(read_data="abcdef")
+
+            with patch.object(Path, "open", opened):
+                result = json.loads(
+                    ReadFileTool(max_chars=3).run(root, {"path": "large.txt"})
+                )
+
+            opened().read.assert_called_once_with(4)
+            self.assertEqual(result["content"], "abc")
+            self.assertTrue(result["truncated"])
 
     def test_rejects_paths_outside_workspace(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -171,6 +187,23 @@ class ToolRegistryTest(unittest.TestCase):
                 result["results"],
                 [{"path": "one.txt", "line": 2, "text": "needle here"}],
             )
+
+    def test_search_text_reports_directory_traversal_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with patch.object(Path, "iterdir", side_effect=OSError("denied")):
+                result = json.loads(SearchTextTool().run(root, {"query": "needle"}))
+
+            self.assertFalse(result["ok"])
+            self.assertIn("could not list directory", result["error"])
+
+    def test_search_text_rejects_invalid_path_argument(self) -> None:
+        result = json.loads(
+            SearchTextTool().run(Path.cwd(), {"query": "needle", "path": 123})
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertIn("path must be a string", result["error"])
 
     def test_list_files_returns_workspace_entries(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -412,6 +445,27 @@ class ToolRegistryTest(unittest.TestCase):
 
             self.assertTrue(result["ok"])
             self.assertEqual((root / "existing.txt").read_text(encoding="utf-8"), "fresh")
+
+    def test_write_file_accepts_empty_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+
+            result = json.loads(
+                WriteFileTool().run(root, {"path": "empty.txt", "content": ""})
+            )
+
+            self.assertTrue(result["ok"])
+            self.assertEqual((root / "empty.txt").read_text(encoding="utf-8"), "")
+
+    def test_file_tool_limits_must_be_positive(self) -> None:
+        constructors = (
+            lambda: ReadFileTool(max_chars=0),
+            lambda: SearchTextTool(max_results=0),
+        )
+        for constructor in constructors:
+            with self.subTest(constructor=constructor):
+                with self.assertRaisesRegex(ValueError, "positive"):
+                    constructor()
 
     def test_write_file_rejects_directory_path(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

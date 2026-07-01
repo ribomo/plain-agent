@@ -1,5 +1,6 @@
 """File permission helpers for workspace tools."""
 
+from collections.abc import Iterator
 from pathlib import Path
 
 IGNORED_DIRS = {".agents", ".codex", ".git", ".sandbox", ".venv", "__pycache__"}
@@ -47,15 +48,20 @@ class WorkspacePermission:
     def contains_path(self, path: Path) -> bool:
         return path == self.workspace or self.workspace in path.parents
 
-    def get_files_under_path(self, path: Path) -> list[Path]:
+    def get_files_under_path(self, path: Path) -> Iterator[Path]:
         if path.is_file():
-            return [path]
-        return self._walk_files(path)
+            yield path
+            return
+        yield from self._walk_files(path)
 
-    def _walk_files(self, path: Path) -> list[Path]:
-        """Collect workspace files recursively, skipping symlinks and blocked paths."""
-        files: list[Path] = []
-        for child in sorted(path.iterdir()):
+    def _walk_files(self, path: Path) -> Iterator[Path]:
+        """Yield workspace files recursively, skipping symlinks and blocked paths."""
+        try:
+            children = sorted(path.iterdir())
+        except OSError as exc:
+            raise FilePermissionError(f"could not list directory: {path}") from exc
+
+        for child in children:
             if child.is_symlink():
                 continue
 
@@ -64,10 +70,9 @@ class WorkspacePermission:
                 continue
 
             if child.is_dir():
-                files += self._walk_files(child)
+                yield from self._walk_files(child)
             elif child.is_file():
-                files.append(child)
-        return files
+                yield child
 
     def _check_inside_workspace(self, absolute_path: Path, original_path: str | Path) -> None:
         if not self.contains_path(absolute_path):

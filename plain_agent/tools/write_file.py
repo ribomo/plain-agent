@@ -32,7 +32,7 @@ class WriteFileTool(BaseTool):
         content = arguments.get("content")
         if not isinstance(path, str):
             return error("path is required")
-        if not isinstance(content, str) or not content:
+        if not isinstance(content, str):
             return error("content is required")
 
         try:
