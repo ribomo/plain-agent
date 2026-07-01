@@ -132,7 +132,7 @@ class ConversationCompactorTest(unittest.TestCase):
         messages = history.to_messages()
         self.assertEqual(
             [message["role"] for message in messages],
-            ["system", "system", "user", "assistant"],
+            ["system", "assistant", "user", "assistant"],
         )
         self.assertEqual(messages[0]["content"], "System")
         self.assertEqual(
@@ -145,7 +145,12 @@ class ConversationCompactorTest(unittest.TestCase):
     def test_compact_rolls_previous_summary_forward(self) -> None:
         llm_client = FakeLLMClient("Updated summary")
         history = ConversationHistory("System")
-        history.append({"role": "system", "content": f"{COMPACTION_SUMMARY_PREFIX}\nEarlier summary"})
+        history.append(
+            {
+                "role": "assistant",
+                "content": f"{COMPACTION_SUMMARY_PREFIX}\nEarlier summary",
+            }
+        )
         history.append_user("Old question")
         history.append_assistant("Old answer")
         history.append_user("Recent question")
@@ -166,7 +171,7 @@ class ConversationCompactorTest(unittest.TestCase):
         summaries = [
             message
             for message in messages
-            if message["role"] == "system"
+            if message["role"] == "assistant"
             and message["content"].startswith(COMPACTION_SUMMARY_PREFIX)
         ]
         self.assertEqual(len(summaries), 1)

@@ -72,6 +72,20 @@ class ConversationHistoryTest(unittest.TestCase):
         self.assertIs(exchange.messages, messages)
         self.assertEqual(exchange.messages[0]["content"], "Original")
 
+    def test_messages_are_copied_at_input_and_output_boundaries(self) -> None:
+        history = ConversationHistory("System")
+        message = {"role": "user", "content": "Original"}
+        history.append(message)
+
+        message["content"] = "Changed outside"
+        indexed = history[1]
+        indexed["content"] = "Changed through index"
+        iterated = next(iter(history))
+        iterated["content"] = "Changed through iterator"
+
+        self.assertEqual(history.to_messages()[0]["content"], "System")
+        self.assertEqual(history.to_messages()[1]["content"], "Original")
+
     def test_estimate_token_count_uses_character_heuristic_and_rounds_up(self) -> None:
         self.assertEqual(estimate_token_count(0), 0)
         self.assertEqual(estimate_token_count(1), 1)

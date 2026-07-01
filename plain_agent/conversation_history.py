@@ -54,7 +54,7 @@ class ConversationHistory:
         ]
 
     def append(self, message: ChatMessage) -> None:
-        self._messages.append(message)
+        self._messages.append(deepcopy(message))
 
     def append_user(self, content: str) -> None:
         message: UserMessage = {"role": USER_ROLE, "content": content}
@@ -73,7 +73,7 @@ class ConversationHistory:
         self.append(message)
 
     def replace(self, messages: list[ChatMessage]) -> None:
-        self._messages = messages
+        self._messages = deepcopy(messages)
 
     def to_messages(self) -> list[ChatMessage]:
         return deepcopy(self._messages)
@@ -88,13 +88,13 @@ class ConversationHistory:
             if message["role"] == USER_ROLE:
                 if current:
                     # A new user message starts the next exchange, so close the previous one.
-                    exchanges.append(ConversationExchange(current))
+                    exchanges.append(ConversationExchange(deepcopy(current)))
                 current = [message]
             elif current:
                 current.append(message)
 
         if current:
-            exchanges.append(ConversationExchange(current))
+            exchanges.append(ConversationExchange(deepcopy(current)))
 
         return exchanges
 
@@ -112,7 +112,7 @@ class ConversationHistory:
         )
 
     def __iter__(self) -> Iterator[ChatMessage]:
-        return iter(self._messages)
+        return (deepcopy(message) for message in tuple(self._messages))
 
     def __len__(self) -> int:
         return len(self._messages)
@@ -126,4 +126,4 @@ class ConversationHistory:
         ...
 
     def __getitem__(self, index: int | slice) -> ChatMessage | list[ChatMessage]:
-        return self._messages[index]
+        return deepcopy(self._messages[index])

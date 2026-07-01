@@ -9,6 +9,7 @@ from plain_agent.conversation_history import (
     ConversationHistory,
 )
 from plain_agent.message_types import (
+    ASSISTANT_ROLE,
     ChatMessage,
     SYSTEM_ROLE,
     USER_ROLE,
@@ -37,6 +38,7 @@ class CompactionWindow:
     """Conversation history divided into old and recent exchange windows."""
 
     system_messages: list[ChatMessage]
+    summary_messages: list[ChatMessage]
     old_exchanges: list[ConversationExchange]
     recent_exchanges: list[ConversationExchange]
 
@@ -50,11 +52,13 @@ def build_compaction_window(
 
     exchanges = history.exchanges()
     system_messages = [message for message in history if message["role"] == SYSTEM_ROLE]
+    summary_messages = [message for message in history if _is_compaction_summary(message)]
 
     # Summarize only the older exchanges; the most recent exchanges stay verbatim.
     split_index = max(0, len(exchanges) - keep_recent_exchanges)
     return CompactionWindow(
         system_messages=system_messages,
+        summary_messages=summary_messages,
         old_exchanges=exchanges[:split_index],
         recent_exchanges=exchanges[split_index:],
     )
@@ -71,7 +75,7 @@ class ConversationCompactor:
     ) -> None:
         self.llm_client = llm_client
         self.model = model
-        self.config = config or CompactionConfig()
+        self.config = config if config is not None else CompactionConfig()
 
     def compact(self, history: ConversationHistory) -> bool:
         window = build_compaction_window(history, self.config.keep_recent_exchanges)
@@ -92,7 +96,7 @@ class ConversationCompactor:
 
     def _summary_request_messages(self, window: CompactionWindow) -> list[ChatMessage]:
         # Carry prior summaries into the next prompt so repeated compactions retain context.
-        previous_summary = self._previous_summary_text(window.system_messages)
+        previous_summary = self._previous_summary_text(window.summary_messages)
         compacted_history = self._serialize_exchanges(window.old_exchanges)
         user_content = COMPACTION_USER_PROMPT_TEMPLATE.format(
             previous_summary=previous_summary or "(none)",
@@ -110,7 +114,8 @@ class ConversationCompactor:
         messages = self._base_system_messages(window.system_messages)
         messages.append(
             {
-                "role": SYSTEM_ROLE,
+                # The summary is model-generated data, not a trusted instruction.
+                "role": ASSISTANT_ROLE,
                 "content": f"{COMPACTION_SUMMARY_PREFIX}\n{summary}",
             }
         )
@@ -120,25 +125,17 @@ class ConversationCompactor:
 
     def _base_system_messages(self, messages: list[ChatMessage]) -> list[ChatMessage]:
         # Replace old compaction summaries with the freshly generated summary.
-        return [message for message in messages if not self._is_compaction_summary(message)]
+        return [message for message in messages if not _is_compaction_summary(message)]
 
     def _previous_summary_text(self, messages: list[ChatMessage]) -> str:
         return "\n\n".join(
             self._compaction_summary_body(message)
             for message in messages
-            if self._is_compaction_summary(message)
+            if _is_compaction_summary(message)
         )
 
     def _compaction_summary_body(self, message: ChatMessage) -> str:
         return str(message["content"])[len(COMPACTION_SUMMARY_PREFIX) :].strip()
-
-    def _is_compaction_summary(self, message: ChatMessage) -> bool:
-        content = message.get("content")
-        return (
-            message["role"] == SYSTEM_ROLE
-            and isinstance(content, str)
-            and content.startswith(COMPACTION_SUMMARY_PREFIX)
-        )
 
     def _serialize_exchanges(self, exchanges: list[ConversationExchange]) -> str:
         return json.dumps(
@@ -159,3 +156,12 @@ class ConversationCompactor:
         if not isinstance(content, str) or not content.strip():
             raise ValueError("compaction response did not include summary content")
         return content.strip()
+
+
+def _is_compaction_summary(message: ChatMessage) -> bool:
+    content = message.get("content")
+    return (
+        message["role"] in {SYSTEM_ROLE, ASSISTANT_ROLE}
+        and isinstance(content, str)
+        and content.startswith(COMPACTION_SUMMARY_PREFIX)
+    )
