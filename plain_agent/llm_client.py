@@ -2,7 +2,7 @@
 
 from openai import OpenAI
 
-from plain_agent.providers import DEEPSEEK_BASE_URL, OPENAI_BASE_URL
+from plain_agent.providers import OPENAI_BASE_URL
 
 
 class LLMClientError(ValueError):
@@ -35,13 +35,3 @@ class OpenAICompatibleClient:
     @property
     def chat(self):
         return self.client.chat
-
-
-class OpenAIClient(OpenAICompatibleClient):
-    """OpenAI client."""
-
-
-class DeepSeekClient(OpenAICompatibleClient):
-    """DeepSeek client using its OpenAI-compatible API."""
-
-    base_url = DEEPSEEK_BASE_URL

@@ -26,8 +26,6 @@ class ToolRegistry:
         permission_controller: PermissionController | None = None,
     ) -> None:
         self.root = Path(root).resolve()
-        self.max_read_chars = max_read_chars
-        self.max_search_results = max_search_results
         self.permission_controller = (
             permission_controller
             if permission_controller is not None
@@ -35,8 +33,8 @@ class ToolRegistry:
         )
         registered_tools: list[BaseTool] = [
             ListFilesTool(),
-            ReadFileTool(max_chars=self.max_read_chars),
-            SearchTextTool(max_results=self.max_search_results),
+            ReadFileTool(max_chars=max_read_chars),
+            SearchTextTool(max_results=max_search_results),
             WriteFileTool(),
             EditFileTool(),
         ]
