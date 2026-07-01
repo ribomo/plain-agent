@@ -5,7 +5,7 @@ from pathlib import Path
 import stat
 
 from plain_agent.sandbox.base import SandboxConfigurationError, SandboxMode
-from plain_agent.tools.permissions.file_permission import (
+from plain_agent.workspace_policy import (
     SENSITIVE_FILE_NAMES,
     SENSITIVE_FILE_SUFFIXES,
 )

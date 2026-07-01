@@ -3,10 +3,21 @@
 from collections.abc import Iterator
 from pathlib import Path
 
-IGNORED_DIRS = {".agents", ".codex", ".git", ".sandbox", ".venv", "__pycache__"}
-SENSITIVE_FILE_NAMES = {".env", "id_dsa", "id_ecdsa", "id_ed25519", "id_rsa"}
-SENSITIVE_FILE_SUFFIXES = {".key", ".pem", ".p12", ".pfx"}
-BLOCKED_PATH_NAMES = IGNORED_DIRS | SENSITIVE_FILE_NAMES
+from plain_agent.workspace_policy import (
+    BLOCKED_PATH_NAMES,
+    IGNORED_DIRS,
+    SENSITIVE_FILE_NAMES,
+    SENSITIVE_FILE_SUFFIXES,
+)
+
+__all__ = [
+    "BLOCKED_PATH_NAMES",
+    "FilePermissionError",
+    "IGNORED_DIRS",
+    "SENSITIVE_FILE_NAMES",
+    "SENSITIVE_FILE_SUFFIXES",
+    "WorkspacePermission",
+]
 
 
 class FilePermissionError(PermissionError):
