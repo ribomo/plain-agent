@@ -1,18 +1,76 @@
 # Plain Agent
 
-A small agent that calls OpenAI compatible LLM APIs.
+A terminal coding agent for LLM APIs compatible with OpenAI. It streams responses, keeps conversation
+context, works with files, runs approved commands in an OS sandbox, and provides approved web
+search and fetch tools.
 
-This project starts with a streaming agent loop:
+## How it works
 
-```text
-Interactive terminal
-  -> reads your prompt
-  -> streams assistant text as it arrives
-  -> detects tool calls from the model
-  -> runs workspace tools when requested
-  -> sends tool results back to the model
-  -> repeats until the assistant gives a final answer
+```mermaid
+flowchart LR
+    User[User] --> UI[Textual terminal UI]
+    UI --> Agent[Streaming agent loop]
+    Agent --> LLM[Compatible LLM API]
+    Agent <--> Tools[Tool registry]
+    Tools --> Files[Workspace file tools]
+    Tools --> Sandbox[Approved Bubblewrap commands]
+    Tools --> Web[Approved Exa web tools]
 ```
+
+The agent sends the conversation and available tool definitions to the configured model. It
+streams text into the terminal, executes requested tools, appends their results to the
+conversation, and repeats until the model returns a final answer.
+
+### Agent loop
+
+```mermaid
+flowchart TB
+    subgraph Input["1 · User input"]
+        Prompt([Submit prompt])
+    end
+
+    subgraph Context["2 · Context preparation"]
+        direction LR
+        History[Append prompt to history]
+        Compact{Compaction needed?}
+        Summarize[Summarize older exchanges]
+        History --> Compact
+        Compact -- Yes --> Summarize
+    end
+
+    subgraph Response["3 · LLM response"]
+        direction LR
+        Model[Send history and tool definitions]
+        Stream[Stream and assemble response]
+        Decision{Tool calls?}
+        Model --> Stream --> Decision
+    end
+
+    subgraph Execution["4 · Tool execution"]
+        direction LR
+        Validate[Validate tool calls]
+        Approve[Request approval when required]
+        Run[Run tools]
+        Results[Append tool results]
+        Validate --> Approve --> Run --> Results
+    end
+
+    subgraph Output["5 · Final output"]
+        Answer([Render final answer])
+    end
+
+    Prompt --> History
+    Compact -- No --> Model
+    Summarize --> Model
+    Decision -- Yes --> Validate
+    Results -- Continue agent loop --> Model
+    Decision -- No --> Answer
+    Answer -- Continue conversation --> Prompt
+```
+
+For more detail, see
+[Architecture](https://github.com/ribomo/plain-agent/blob/main/docs/architecture.md) for the
+component design, request lifecycle, and trust boundaries.
 
 ## Install
 
@@ -78,7 +136,7 @@ You can also run `/compact` in the terminal to compact manually.
 
 ### Web access
 
-The Exa-backed `web_search` and `web_fetch` tools are enabled by default. Every query or URL
+The `web_search` and `web_fetch` tools use Exa and are enabled by default. Every query or URL
 requires explicit approval before Plain Agent connects to `mcp.exa.ai`. Search returns links and
 bounded excerpts; fetch returns bounded Markdown content for one HTTP or HTTPS URL. No Exa API key
 is required.
@@ -89,21 +147,33 @@ To disable both web tools:
 export PLAIN_AGENT_ENABLE_NETWORK="false"
 ```
 
-This setting controls only the built-in web tools. The `run_command` sandbox remains offline.
+This setting controls only the web tools provided with Plain Agent. The `run_command` sandbox
+remains offline.
 
 ## Run
+
+After installing with `pipx`:
+
+```bash
+plain-agent
+```
+
+For local development from a repository checkout:
 
 ```bash
 uv run plain-agent
 ```
 
+Enter a prompt in the terminal. Use `/compact` to summarize older conversation history, or enter
+`exit` or `quit` to close the application.
+
 ## Command sandbox (Linux)
 
 Every `run_command` request requires user approval and still runs through Bubblewrap after it is
-approved. The approval prompt shows the requested mode and an unambiguous shell-quoted
-representation of the exact argument vector. Backslashes and non-printable characters are escaped
-so command arguments cannot rewrite the terminal prompt. Approval is a user decision; Bubblewrap
-is the independent OS enforcement boundary.
+approved. The approval prompt shows the requested mode and an unambiguous representation of the
+exact argument vector using shell quoting. Backslashes and characters outside the printable range
+are escaped so command arguments cannot rewrite the terminal prompt. Approval is a user decision;
+Bubblewrap is the independent OS enforcement boundary.
 
 Commands are passed as an argument array and never receive an implicit shell. For example,
 `["rg", "TODO", "."]` runs directly, while shell syntax must be explicit as
@@ -111,22 +181,24 @@ Commands are passed as an argument array and never receive an implicit shell. Fo
 
 Two modes are available:
 
-- `read-only` is the default and mounts the workspace read-only.
+- `read-only` is the default and mounts the workspace without write access.
 - `workspace-write` permits persistent workspace changes, except protected paths.
 
 Both modes have networking disabled, including host loopback. The sandbox starts with an empty
-filesystem view and exposes only the workspace, required read-only system runtimes, a minimal set
-of `/etc` files, and temporary in-memory `/tmp`, `/run`, and `HOME` directories. The environment is
-cleared; only a filtered `PATH`, locale, terminal, and color settings are retained. API keys and
-arbitrary parent variables are not inherited by commands.
+filesystem view and exposes the workspace, required system runtimes mounted as read only, a
+minimal set of `/etc` files, isolated `/proc` and `/dev` filesystems, and temporary memory backed
+`/tmp`, `/run`, and `HOME` directories. The environment is cleared; only a filtered `PATH`, locale,
+terminal, and color settings are retained. API keys and arbitrary parent variables are not
+inherited by commands.
 
-In `workspace-write`, existing `.git` and `.venv` directories are rebound read-only. `.agents`,
-`.codex`, and `.sandbox` are hidden. `.env` plus recognized private-key and certificate files are
-masked in both modes, as are existing pathname Unix sockets. In-process file tools continue to use
-their existing workspace permission checks and are not run through Bubblewrap.
+In `workspace-write`, existing `.git` and `.venv` directories are rebound as read only. `.agents`,
+`.codex`, and `.sandbox` are hidden. `.env` plus recognized private key and certificate files are
+masked in both modes, as are existing pathname Unix sockets. File tools running in the Plain Agent
+process continue to use their existing workspace permission checks and are not run through
+Bubblewrap.
 
-Additional toolchains can be exposed read-only with an OS-path-separated list of absolute,
-existing paths:
+Additional toolchains can be exposed as read only with a list of absolute, existing paths separated
+by the operating system path separator:
 
 ```bash
 export PLAIN_AGENT_SANDBOX_ADDITIONAL_READ_ROOTS="/opt/toolchain:/home/me/.local/share/special-runtime"
@@ -137,6 +209,6 @@ below it. Paths are canonicalized and deduplicated before use. Avoid exposing ho
 credential stores.
 
 The command sandbox is deliberately offline. Package downloads, remote Git operations, and calls
-to local network services fail. Linux is the only supported command-sandbox platform in this
+to local network services fail. Linux is the only supported command sandbox platform in this
 milestone; macOS and Windows keep `run_command` disabled. Seccomp syscall filtering is planned as
 the next Linux hardening step after the filesystem and network policy is stable.

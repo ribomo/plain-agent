@@ -1,4 +1,4 @@
-"""Simple tool loop for the educational agent."""
+"""Streaming agent loop with workspace tool support."""
 
 from collections.abc import Iterable
 import json
@@ -20,7 +20,7 @@ from plain_agent.tools.utils import error
 
 
 class SimpleAgent:
-    """A tiny Chat Completions agent loop with workspace tools."""
+    """Run a streaming Chat Completions loop with workspace tools."""
 
     def __init__(
         self,
