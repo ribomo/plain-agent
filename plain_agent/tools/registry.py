@@ -12,6 +12,7 @@ from plain_agent.tools.run_command import RunCommandTool
 from plain_agent.tools.search_text import SearchTextTool
 from plain_agent.tools.utils import error
 from plain_agent.tools.web import WebFetchTool, WebSearchTool
+from plain_agent.tools.web.providers.parallel import ParallelWebClient
 from plain_agent.tools.write_file import WriteFileTool
 
 
@@ -26,7 +27,10 @@ class ToolRegistry:
         enable_commands: bool = True,
         permission_controller: PermissionController | None = None,
         enable_network: bool = True,
+        web_provider: str = "exa",
     ) -> None:
+        if web_provider not in {"exa", "parallel"}:
+            raise ValueError("web_provider must be 'exa' or 'parallel'")
         self.root = Path(root).resolve()
         self.permission_controller = (
             permission_controller
@@ -42,10 +46,11 @@ class ToolRegistry:
         ]
         self.startup_warnings: list[str] = []
         if enable_network:
+            web_client = ParallelWebClient() if web_provider == "parallel" else None
             registered_tools.extend(
                 [
-                    WebSearchTool(self.permission_controller),
-                    WebFetchTool(self.permission_controller),
+                    WebSearchTool(self.permission_controller, web_client),
+                    WebFetchTool(self.permission_controller, web_client),
                 ]
             )
         if enable_commands:

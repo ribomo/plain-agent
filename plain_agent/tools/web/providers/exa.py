@@ -26,6 +26,7 @@ class _ExaMcpClient:
     """Bounded synchronous client for Exa's fixed MCP endpoint."""
 
     action = "Exa request"
+    destination = EXA_DESTINATION
     error_type: type[RuntimeError] = RuntimeError
 
     def __init__(

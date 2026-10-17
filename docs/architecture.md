@@ -82,7 +82,7 @@ tool errors rather than terminating the session.
 | `PermissionController` | Routes command and web operations through a one-time user approval. |
 | `CommandRuntime` | Runs an approved command through the sandbox backend with time and output limits. |
 | `BubblewrapSandbox` | Constructs the Linux namespace, mount, environment, and network-isolation policy. |
-| Exa clients | Send bounded search and fetch requests to the fixed Exa MCP endpoint. |
+| Web provider clients | Send bounded search and fetch requests to the selected fixed MCP endpoint: Exa by default, or Parallel when configured. |
 
 ## Tool architecture
 
@@ -109,7 +109,7 @@ flowchart TB
     CommandApproval -- No --> Result[JSON tool result]
 
     Web --> NetworkApproval{User approves?}
-    NetworkApproval -- Yes --> Exa[Exa MCP endpoint]
+    NetworkApproval -- Yes --> Exa[Selected web provider MCP endpoint]
     NetworkApproval -- No --> Result
 
     FilePolicy --> Result
@@ -171,7 +171,7 @@ flowchart TB
     Workspace[(Workspace)]
     Sandbox[Bubblewrap sandbox]
     LLM[LLM API]
-    Exa[Exa MCP endpoint]
+    Exa[Selected web provider MCP endpoint]
 
     User <--> Agent
     Agent <--> Workspace
@@ -184,7 +184,8 @@ flowchart TB
 The current security model separates validation, user consent, and OS enforcement:
 
 - LLM requests are core application traffic and do not prompt for per-request approval.
-- Each web query or fetch requires approval before the host contacts `mcp.exa.ai`. Responses have
+- Each web query or fetch requires approval before the host contacts the selected provider,
+  `mcp.exa.ai` or `search.parallel.ai`. Responses have
   byte and character limits, and fetch URLs are restricted to absolute HTTP or HTTPS URLs without
   credentials. Returned web content is external, untrusted data supplied to the model.
 - File tools run in the Plain Agent process. They resolve paths against the workspace, reject path
@@ -196,7 +197,7 @@ The current security model separates validation, user consent, and OS enforcemen
   environment, and see a restricted filesystem. Read-only mode is the default. Workspace-write
   mode keeps `.git` and `.venv` read-only; hides `.agents`, `.codex`, and `.sandbox`; and masks
   sensitive files and existing Unix sockets.
-- Command execution is bounded by a timeout and retained-output limit. Exa calls also use timeouts
+- Command execution is bounded by a timeout and retained-output limit. Web provider calls also use timeouts
   and response-size limits.
 
 Bubblewrap isolation currently supports Linux only. Other platforms run without `run_command`.

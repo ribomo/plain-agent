@@ -11,16 +11,16 @@ from plain_agent.tools.permissions.controller import (
 from plain_agent.tools.permissions.network_permission import NetworkPermissionRequest
 from plain_agent.tools.utils import error, ok
 from plain_agent.tools.web.providers.exa import (
-    EXA_DESTINATION,
     ExaFetchClient,
     ExaFetchError,
 )
+from plain_agent.tools.web.providers.parallel import ParallelWebClient, ParallelWebError
 
 MAX_URL_CHARS = 2_000
 
 
 class WebFetchTool(BaseTool):
-    """Fetch a webpage through Exa after explicit user approval."""
+    """Fetch a webpage through the selected provider after explicit approval."""
 
     name = "web_fetch"
     description = "Fetch a webpage and return its clean, bounded Markdown content."
@@ -41,7 +41,7 @@ class WebFetchTool(BaseTool):
     def __init__(
         self,
         permission_controller: PermissionController | None = None,
-        client: ExaFetchClient | None = None,
+        client: ExaFetchClient | ParallelWebClient | None = None,
     ) -> None:
         self.permission_controller = (
             permission_controller
@@ -60,7 +60,7 @@ class WebFetchTool(BaseTool):
 
         request = NetworkPermissionRequest(
             tool=self.name,
-            destination=EXA_DESTINATION,
+            destination=self.client.destination,
             target=url,
         )
         try:
@@ -68,7 +68,7 @@ class WebFetchTool(BaseTool):
             content = self.client.fetch(url)
         except ApprovalDeniedError:
             return error("web_fetch was not approved")
-        except ExaFetchError as exc:
+        except (ExaFetchError, ParallelWebError) as exc:
             return error(str(exc))
 
         return ok({"url": url, "content": content})

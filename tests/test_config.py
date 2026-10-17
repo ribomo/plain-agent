@@ -26,6 +26,7 @@ class AppConfigTest(unittest.TestCase):
                 "LLM_COMPACTION_MODEL",
                 "LLM_COMPACTION_AUTO_MAX_TOKENS",
                 "PLAIN_AGENT_ENABLE_NETWORK",
+                "PLAIN_AGENT_WEB_PROVIDER",
             },
         )
 
@@ -41,6 +42,17 @@ class AppConfigTest(unittest.TestCase):
         self.assertIsNone(config.compaction.model)
         self.assertEqual(config.compaction.auto_max_tokens, 200_000)
         self.assertTrue(config.network.enabled)
+        self.assertEqual(config.network.provider, "exa")
+
+    def test_selects_parallel_without_credentials(self) -> None:
+        config = AppConfig.from_env({"PLAIN_AGENT_WEB_PROVIDER": " Parallel "})
+
+        self.assertEqual(config.network.provider, "parallel")
+        self.assertIsNone(config.llm.api_key)
+
+    def test_rejects_unknown_web_provider(self) -> None:
+        with self.assertRaisesRegex(ValueError, "PLAIN_AGENT_WEB_PROVIDER"):
+            AppConfig.from_env({"PLAIN_AGENT_WEB_PROVIDER": "unknown"})
 
     def test_loads_openai_and_optional_settings(self) -> None:
         config = AppConfig.from_env(

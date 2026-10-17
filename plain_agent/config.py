@@ -16,6 +16,7 @@ from plain_agent.environment import (
     ENV_LLM_TIMEOUT,
     ENV_OPENAI_API_KEY,
     ENV_PLAIN_AGENT_ENABLE_NETWORK,
+    ENV_PLAIN_AGENT_WEB_PROVIDER,
 )
 from plain_agent.providers import (
     DEEPSEEK_BASE_URL,
@@ -50,6 +51,7 @@ class NetworkSettings:
     """Settings for optional network tools."""
 
     enabled: bool
+    provider: str = "exa"
 
 
 @dataclass(frozen=True)
@@ -81,8 +83,16 @@ class AppConfig:
                     env.get(ENV_PLAIN_AGENT_ENABLE_NETWORK),
                     True,
                 ),
+                provider=_web_provider(env),
             ),
         )
+
+
+def _web_provider(env: Mapping[str, str]) -> str:
+    provider = env.get(ENV_PLAIN_AGENT_WEB_PROVIDER, "exa").strip().lower()
+    if provider not in {"exa", "parallel"}:
+        raise ValueError(f"{ENV_PLAIN_AGENT_WEB_PROVIDER} must be 'exa' or 'parallel'")
+    return provider
 
 
 def _llm_settings(env: Mapping[str, str]) -> LLMSettings:

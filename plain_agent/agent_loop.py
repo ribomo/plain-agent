@@ -32,6 +32,7 @@ class SimpleAgent:
         auto_compact_max_tokens: int | None = None,
         permission_controller: PermissionController | None = None,
         enable_network: bool = True,
+        web_provider: str = "exa",
     ) -> None:
         if max_turns < 1:
             raise ValueError("max_turns must be positive")
@@ -51,6 +52,7 @@ class SimpleAgent:
             workspace,
             permission_controller=self.permission_controller,
             enable_network=enable_network,
+            web_provider=web_provider,
         )
         self.startup_warnings = self.tool_registry.startup_warnings
         self.conversation_history = ConversationHistory(INITIAL_PROMPT)

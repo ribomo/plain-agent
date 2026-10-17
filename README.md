@@ -14,7 +14,7 @@ flowchart LR
     Agent <--> Tools[Tool registry]
     Tools --> Files[Workspace file tools]
     Tools --> Sandbox[Approved Bubblewrap commands]
-    Tools --> Web[Approved Exa web tools]
+    Tools --> Web[Approved web tools]
 ```
 
 The agent sends the conversation and available tool definitions to the configured model. It
@@ -140,6 +140,17 @@ The `web_search` and `web_fetch` tools use Exa and are enabled by default. Every
 requires explicit approval before Plain Agent connects to `mcp.exa.ai`. Search returns links and
 bounded excerpts; fetch returns bounded Markdown content for one HTTP or HTTPS URL. No Exa API key
 is required.
+
+To use [Parallel Search MCP](https://docs.parallel.ai/integrations/mcp/search-mcp) instead:
+
+```bash
+export PLAIN_AGENT_WEB_PROVIDER="parallel"
+```
+
+Parallel provides free web search in Fast mode and page fetching without an account or API key,
+subject to free-tier rate limits. Each query or URL still requires approval before Plain Agent
+connects to `search.parallel.ai`. Both providers return bounded content through the same tools.
+Set `PLAIN_AGENT_WEB_PROVIDER="exa"` or unset it to use the default provider again.
 
 To disable both web tools:
 
