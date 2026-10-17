@@ -10,10 +10,10 @@ from plain_agent.tools.permissions.controller import (
 from plain_agent.tools.permissions.network_permission import NetworkPermissionRequest
 from plain_agent.tools.utils import error, ok
 from plain_agent.tools.web.providers.exa import (
-    EXA_DESTINATION,
     ExaSearchClient,
     ExaSearchError,
 )
+from plain_agent.tools.web.providers.parallel import ParallelWebClient, ParallelWebError
 
 MAX_QUERY_CHARS = 2_000
 
@@ -40,7 +40,7 @@ class WebSearchTool(BaseTool):
     def __init__(
         self,
         permission_controller: PermissionController | None = None,
-        client: ExaSearchClient | None = None,
+        client: ExaSearchClient | ParallelWebClient | None = None,
     ) -> None:
         self.permission_controller = (
             permission_controller
@@ -59,7 +59,7 @@ class WebSearchTool(BaseTool):
 
         request = NetworkPermissionRequest(
             tool=self.name,
-            destination=EXA_DESTINATION,
+            destination=self.client.destination,
             target=query,
         )
         try:
@@ -67,7 +67,7 @@ class WebSearchTool(BaseTool):
             content = self.client.search(query)
         except ApprovalDeniedError:
             return error("web_search was not approved")
-        except ExaSearchError as exc:
+        except (ExaSearchError, ParallelWebError) as exc:
             return error(str(exc))
 
         return ok({"query": query, "content": content})

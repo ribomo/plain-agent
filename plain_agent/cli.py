@@ -35,6 +35,7 @@ def main() -> None:
         compactor=compactor,
         auto_compact_max_tokens=config.compaction.auto_max_tokens,
         enable_network=config.network.enabled,
+        web_provider=config.network.provider,
     )
 
     PlainAgentApp(agent).run()
