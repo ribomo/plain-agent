@@ -138,6 +138,8 @@ class ParallelWebClient:
                 continue
             if result.get("isError"):
                 raise ParallelWebError("Parallel could not complete the web request")
+            structured = result.get("structuredContent")
+            self._check_fetch_errors(structured)
             content = result.get("content")
             if not isinstance(content, list):
                 continue
@@ -149,5 +151,15 @@ class ParallelWebClient:
                 and isinstance(item.get("text"), str)
             ]
             if parts:
-                return "\n".join(parts)[:max_content_chars]
+                content = "\n".join(parts)
+                try:
+                    structured = json.loads(content)
+                except json.JSONDecodeError:
+                    structured = None
+                self._check_fetch_errors(structured)
+                return content[:max_content_chars]
         raise ParallelWebError("Parallel returned an invalid response")
+
+    def _check_fetch_errors(self, value: object) -> None:
+        if isinstance(value, dict) and value.get("results") == [] and value.get("errors"):
+            raise ParallelWebError("Parallel could not fetch the webpage")

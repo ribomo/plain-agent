@@ -37,6 +37,7 @@ class ParallelWebTest(unittest.TestCase):
     def setUp(self) -> None:
         self.requests: list[httpx.Request] = []
         self.approvals = []
+        self.clients = []
         self.response = httpx.Response(
             200, json=mcp_result("Python: https://python.org\nRelease notes")
         )
@@ -49,7 +50,9 @@ class ParallelWebTest(unittest.TestCase):
 
         def client_factory(**kwargs):
             kwargs["transport"] = self.transport
-            return HTTPX_CLIENT(**kwargs)
+            client = HTTPX_CLIENT(**kwargs)
+            self.clients.append(client)
+            return client
 
         self.client_patch = patch("httpx.Client", side_effect=client_factory)
         self.client_patch.start()
@@ -227,6 +230,19 @@ class ParallelWebTest(unittest.TestCase):
         self.transport.handler = interrupt
         with self.assertRaises(KeyboardInterrupt):
             registry.run("web_search", {"query": "q"})
+        self.assertTrue(self.clients[-1].is_closed)
+
+    def test_extraction_errors_do_not_report_success(self) -> None:
+        failed_extract = {"results": [], "errors": [{"url": "https://python.org", "error_type": "secret detail"}]}
+        for structured in (False, True):
+            payload = mcp_result(json.dumps(failed_extract))
+            if structured:
+                payload["result"]["structuredContent"] = failed_extract
+            self.response = httpx.Response(200, json=payload)
+            result = json.loads(self.registry().run("web_fetch", {"url": "https://python.org"}))
+            self.assertFalse(result["ok"])
+            self.assertIn("could not fetch", result["error"])
+            self.assertNotIn("secret", result["error"])
 
     def test_declared_and_streamed_response_size_limits(self) -> None:
         class Chunks(httpx.SyncByteStream):
